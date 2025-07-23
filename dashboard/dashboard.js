@@ -1,44 +1,429 @@
+// FocusGuard Dashboard - Mindfulness-Focused JavaScript
+
 let allSessions = [];
 let currentFilter = 'all';
 let dateFilter = 'today';
 let updateInterval = null;
+let sessionReflections = [];
 
 async function loadDashboardData() {
-  const data = await chrome.storage.local.get(['sessions', 'totalTimeSpent']);
-  allSessions = data.sessions || [];
-  const timeSpent = data.totalTimeSpent || {};
-  
-  updateStats(timeSpent);
-  updateSessionsList();
-  analyzePatterns();
+  try {
+    const data = await chrome.storage.local.get([
+      'sessions', 
+      'totalTimeSpent', 
+      'sessionReflections',
+      'halfwayReminders',
+      'reflectionPrompts',
+      'youtubeDefault',
+      'whatsappDefault'
+    ]);
+    
+    allSessions = data.sessions || [];
+    sessionReflections = data.sessionReflections || [];
+    
+    const timeSpent = data.totalTimeSpent || {};
+    
+    updateMindfulnessOverview(timeSpent);
+    updateSiteBreakdown(timeSpent);
+    updateMindfulInsights();
+    updateRecentSessions();
+    loadSettings(data);
+    
+  } catch (error) {
+    console.error('FocusGuard Dashboard: Error loading data:', error);
+    showErrorState();
+  }
 }
 
-function updateStats(timeSpent) {
+function updateMindfulnessOverview(timeSpent) {
   const filteredSessions = filterSessionsByDate(allSessions);
   
-  // Calculate time based on filtered sessions
+  // Calculate intention score
+  const intentionScore = calculateIntentionScore(filteredSessions);
+  updateScoreDisplay(intentionScore);
+  
+  // Update mindful time
   const filteredTimeSpent = calculateFilteredTimeSpent(filteredSessions, timeSpent);
-  const youtubeTime = filteredTimeSpent.YouTube || 0;
-  const whatsappTime = filteredTimeSpent.WhatsApp || 0;
-  const totalTime = youtubeTime + whatsappTime;
+  const totalTime = (filteredTimeSpent.YouTube || 0) + (filteredTimeSpent.WhatsApp || 0);
+  document.getElementById('mindful-time').textContent = formatTime(totalTime);
   
-  document.getElementById('total-time').textContent = formatTime(totalTime);
-  document.getElementById('youtube-total').textContent = formatTime(youtubeTime);
-  document.getElementById('whatsapp-total').textContent = formatTime(whatsappTime);
+  // Update session count
+  const uniqueSessions = getUniqueSessions(filteredSessions);
+  document.getElementById('session-count').textContent = uniqueSessions.length;
   
-  document.getElementById('session-count').textContent = filteredSessions.length;
+  // Update goals achieved
+  const goalsAchieved = calculateGoalsAchieved(filteredSessions);
+  document.getElementById('goals-achieved').textContent = `${goalsAchieved.achieved}/${goalsAchieved.total}`;
   
-  const focusScore = calculateFocusScore(filteredSessions);
-  document.getElementById('focus-score').textContent = `${focusScore}%`;
-  document.getElementById('score-fill').style.width = `${focusScore}%`;
-  
-  const avgDuration = calculateAverageDuration(filteredSessions);
-  document.getElementById('avg-duration').textContent = `${avgDuration}m`;
-  
-  const onTrack = calculateOnTrackPercentage(filteredSessions);
-  document.getElementById('on-track-percentage').textContent = `${onTrack}%`;
+  // Update change indicators
+  updateChangeIndicators(filteredSessions);
 }
 
+function calculateIntentionScore(sessions) {
+  if (sessions.length === 0) return 85; // Default score
+  
+  let totalScore = 0;
+  let scoredSessions = 0;
+  
+  sessions.forEach(session => {
+    if (session.intention) {
+      scoredSessions++;
+      let sessionScore = 50; // Base score for having an intention
+      
+      // Check if there's a reflection for this session
+      const reflection = sessionReflections.find(r => 
+        Math.abs(r.timestamp - session.timestamp) < 60000 // Within 1 minute
+      );
+      
+      if (reflection) {
+        switch (reflection.outcome) {
+          case 'accomplished':
+            sessionScore = 95;
+            break;
+          case 'partial':
+            sessionScore = 75;
+            break;
+          case 'distracted':
+            sessionScore = 45;
+            break;
+        }
+      } else if (session.actualSearch) {
+        const similarity = calculateIntentionSimilarity(session.intention, session.actualSearch);
+        sessionScore = Math.round(similarity * 100);
+      } else {
+        sessionScore = 70; // No search tracked
+      }
+      
+      totalScore += sessionScore;
+    }
+  });
+  
+  return scoredSessions > 0 ? Math.round(totalScore / scoredSessions) : 85;
+}
+
+function updateScoreDisplay(score) {
+  // Update score value
+  document.getElementById('intention-score').textContent = score;
+  
+  // Update SVG progress circle
+  const progressCircle = document.getElementById('intention-progress');
+  if (progressCircle) {
+    const circumference = 2 * Math.PI * 40; // radius = 40
+    const offset = circumference - (score / 100) * circumference;
+    progressCircle.style.strokeDashoffset = offset;
+  }
+  
+  // Update insight message
+  const insightText = document.querySelector('#score-insight .insight-text');
+  if (insightText) {
+    if (score >= 90) {
+      insightText.textContent = "Excellent focus! You're mastering mindful browsing.";
+    } else if (score >= 75) {
+      insightText.textContent = "Great focus today! You stayed true to your intentions.";
+    } else if (score >= 60) {
+      insightText.textContent = "Good awareness. Keep refining your focus practice.";
+    } else {
+      insightText.textContent = "Room for growth. Try setting clearer intentions.";
+    }
+  }
+}
+
+function updateSiteBreakdown(timeSpent) {
+  const filteredSessions = filterSessionsByDate(allSessions);
+  const filteredTimeSpent = calculateFilteredTimeSpent(filteredSessions, timeSpent);
+  
+  // Update YouTube card
+  const youtubeTime = filteredTimeSpent.YouTube || 0;
+  const youtubeSessions = filteredSessions.filter(s => s.site === 'YouTube');
+  document.getElementById('youtube-time').textContent = formatTime(youtubeTime);
+  document.getElementById('youtube-sessions').textContent = `${getUniqueSessions(youtubeSessions).length} sessions`;
+  
+  const youtubeAvg = getUniqueSessions(youtubeSessions).length > 0 ? 
+    Math.round(youtubeTime / (getUniqueSessions(youtubeSessions).length * 60000)) : 0;
+  document.querySelector('.site-card.youtube .avg-duration').textContent = `Avg: ${youtubeAvg}min`;
+  
+  // Update YouTube intention match
+  const youtubeMatch = calculateSiteIntentionMatch(youtubeSessions);
+  document.getElementById('youtube-match').style.width = `${youtubeMatch}%`;
+  document.querySelector('.site-card.youtube .match-label').textContent = `${youtubeMatch}% intention match`;
+  
+  // Update WhatsApp card
+  const whatsappTime = filteredTimeSpent.WhatsApp || 0;
+  const whatsappSessions = filteredSessions.filter(s => s.site === 'WhatsApp');
+  document.getElementById('whatsapp-time').textContent = formatTime(whatsappTime);
+  document.getElementById('whatsapp-sessions').textContent = `${getUniqueSessions(whatsappSessions).length} sessions`;
+  
+  const whatsappAvg = getUniqueSessions(whatsappSessions).length > 0 ? 
+    Math.round(whatsappTime / (getUniqueSessions(whatsappSessions).length * 60000)) : 0;
+  document.querySelector('.site-card.whatsapp .avg-duration').textContent = `Avg: ${whatsappAvg}min`;
+  
+  // Update WhatsApp intention match
+  const whatsappMatch = calculateSiteIntentionMatch(whatsappSessions);
+  document.getElementById('whatsapp-match').style.width = `${whatsappMatch}%`;
+  document.querySelector('.site-card.whatsapp .match-label').textContent = `${whatsappMatch}% intention match`;
+}
+
+function calculateSiteIntentionMatch(sessions) {
+  if (sessions.length === 0) return 90;
+  
+  let totalMatch = 0;
+  let matchedSessions = 0;
+  
+  sessions.forEach(session => {
+    if (session.intention) {
+      matchedSessions++;
+      
+      const reflection = sessionReflections.find(r => 
+        Math.abs(r.timestamp - session.timestamp) < 60000
+      );
+      
+      if (reflection) {
+        switch (reflection.outcome) {
+          case 'accomplished':
+            totalMatch += 95;
+            break;
+          case 'partial':
+            totalMatch += 75;
+            break;
+          case 'distracted':
+            totalMatch += 45;
+            break;
+        }
+      } else if (session.actualSearch) {
+        const similarity = calculateIntentionSimilarity(session.intention, session.actualSearch);
+        totalMatch += similarity * 100;
+      } else {
+        totalMatch += 80;
+      }
+    }
+  });
+  
+  return matchedSessions > 0 ? Math.round(totalMatch / matchedSessions) : 90;
+}
+
+function updateMindfulInsights() {
+  updateReflectionSummary();
+  updateHabitTrends();
+  updateGoalPatterns();
+}
+
+function updateReflectionSummary() {
+  const recentReflections = sessionReflections
+    .filter(r => r.timestamp > Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+    .slice(-20); // Recent 20 reflections
+  
+  const accomplished = recentReflections.filter(r => r.outcome === 'accomplished').length;
+  const partial = recentReflections.filter(r => r.outcome === 'partial').length;
+  const distracted = recentReflections.filter(r => r.outcome === 'distracted').length;
+  
+  document.getElementById('accomplished-count').textContent = accomplished;
+  document.getElementById('partial-count').textContent = partial;
+  document.getElementById('distracted-count').textContent = distracted;
+}
+
+function updateHabitTrends() {
+  const sessions = filterSessionsByDate(allSessions);
+  const morningFocus = calculateTimeOfDayFocus(sessions, 6, 12); // 6am-12pm
+  const afternoonFocus = calculateTimeOfDayFocus(sessions, 12, 18); // 12pm-6pm
+  
+  // Update trend bars (mock data for now)
+  const morningTrend = document.querySelector('.trend-item.improving .trend-fill');
+  const afternoonTrend = document.querySelector('.trend-item.stable .trend-fill');
+  
+  if (morningTrend) morningTrend.style.width = `${morningFocus}%`;
+  if (afternoonTrend) afternoonTrend.style.width = `${afternoonFocus}%`;
+}
+
+function calculateTimeOfDayFocus(sessions, startHour, endHour) {
+  const timePeriodSessions = sessions.filter(session => {
+    const hour = new Date(session.timestamp).getHours();
+    return hour >= startHour && hour < endHour;
+  });
+  
+  if (timePeriodSessions.length === 0) return 70; // Default
+  
+  const reflectedSessions = timePeriodSessions.filter(session => {
+    const reflection = sessionReflections.find(r => 
+      Math.abs(r.timestamp - session.timestamp) < 60000
+    );
+    return reflection && (reflection.outcome === 'accomplished' || reflection.outcome === 'partial');
+  });
+  
+  return Math.round((reflectedSessions.length / timePeriodSessions.length) * 100);
+}
+
+function updateGoalPatterns() {
+  const sessions = filterSessionsByDate(allSessions);
+  const goalCategories = categorizeIntentions(sessions);
+  
+  // Update goal insights
+  const goalInsightsContainer = document.getElementById('goal-insights');
+  if (goalInsightsContainer) {
+    goalInsightsContainer.innerHTML = Object.entries(goalCategories)
+      .slice(0, 3) // Top 3 categories
+      .map(([category, data]) => `
+        <div class="goal-insight">
+          <span class="goal-category">${category}</span>
+          <span class="goal-success">${data.successRate}% success</span>
+        </div>
+      `).join('');
+  }
+}
+
+function categorizeIntentions(sessions) {
+  const categories = {
+    'Learning': { total: 0, successful: 0, successRate: 0 },
+    'Communication': { total: 0, successful: 0, successRate: 0 },
+    'Entertainment': { total: 0, successful: 0, successRate: 0 }
+  };
+  
+  sessions.forEach(session => {
+    if (!session.intention) return;
+    
+    const intention = session.intention.toLowerCase();
+    let category = 'Entertainment'; // default
+    
+    if (intention.includes('learn') || intention.includes('tutorial') || 
+        intention.includes('study') || intention.includes('research')) {
+      category = 'Learning';
+    } else if (intention.includes('message') || intention.includes('chat') || 
+               intention.includes('contact') || intention.includes('call')) {
+      category = 'Communication';
+    }
+    
+    categories[category].total++;
+    
+    const reflection = sessionReflections.find(r => 
+      Math.abs(r.timestamp - session.timestamp) < 60000
+    );
+    
+    if (reflection && (reflection.outcome === 'accomplished' || reflection.outcome === 'partial')) {
+      categories[category].successful++;
+    }
+  });
+  
+  // Calculate success rates
+  Object.keys(categories).forEach(category => {
+    const data = categories[category];
+    data.successRate = data.total > 0 ? Math.round((data.successful / data.total) * 100) : 90;
+  });
+  
+  return categories;
+}
+
+function updateRecentSessions() {
+  const sessionsList = document.getElementById('sessions-list');
+  const filteredSessions = filterSessionsByDate(allSessions);
+  
+  let displaySessions;
+  if (currentFilter === 'all') {
+    displaySessions = filteredSessions;
+  } else {
+    displaySessions = filteredSessions.filter(s => s.site === currentFilter);
+  }
+  
+  if (displaySessions.length === 0) {
+    // Keep the empty state HTML that's already in the dashboard
+    return;
+  }
+  
+  // Group sessions by unique intention/timestamp combinations
+  const uniqueSessions = getUniqueSessions(displaySessions)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10); // Show last 10 sessions
+  
+  sessionsList.innerHTML = `
+    <div class="sessions-timeline">
+      ${uniqueSessions.map(session => createSessionCard(session)).join('')}
+    </div>
+  `;
+}
+
+function getUniqueSessions(sessions) {
+  const uniqueMap = new Map();
+  
+  sessions.forEach(session => {
+    const key = `${Math.floor(session.timestamp / 60000)}-${session.intention}`;
+    if (!uniqueMap.has(key) || uniqueMap.get(key).timestamp < session.timestamp) {
+      uniqueMap.set(key, session);
+    }
+  });
+  
+  return Array.from(uniqueMap.values());
+}
+
+function createSessionCard(session) {
+  const reflection = sessionReflections.find(r => 
+    Math.abs(r.timestamp - session.timestamp) < 60000
+  );
+  
+  const icon = session.site === 'YouTube' ? '🎥' : '💬';
+  const date = new Date(session.timestamp);
+  const timeAgo = getTimeAgo(session.timestamp);
+  
+  let statusColor = '#6750A4'; // Default primary
+  let statusText = 'Focused session';
+  
+  if (reflection) {
+    switch (reflection.outcome) {
+      case 'accomplished':
+        statusColor = '#4CAF50';
+        statusText = 'Goal accomplished';
+        break;
+      case 'partial':
+        statusColor = '#FF9800';
+        statusText = 'Made progress';
+        break;
+      case 'distracted':
+        statusColor = '#757575';
+        statusText = 'Got distracted';
+        break;
+    }
+  }
+  
+  return `
+    <div class="session-item fade-in">
+      <div class="session-icon">${icon}</div>
+      <div class="session-details">
+        <div class="session-intention">${session.intention}</div>
+        <div class="session-meta">
+          <span>${timeAgo}</span>
+          <span style="color: ${statusColor};">•</span>
+          <span style="color: ${statusColor};">${statusText}</span>
+        </div>
+        ${session.actualSearch ? `
+          <div class="session-search">Searched: "${session.actualSearch}"</div>
+        ` : ''}
+      </div>
+      <div class="session-outcome" style="background: ${statusColor}; opacity: 0.2; width: 8px; height: 8px; border-radius: 50%;"></div>
+    </div>
+  `;
+}
+
+function getTimeAgo(timestamp) {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'Just now';
+}
+
+function loadSettings(data) {
+  // Load checkbox settings
+  document.getElementById('halfway-reminders').checked = data.halfwayReminders !== false;
+  document.getElementById('reflection-prompts').checked = data.reflectionPrompts !== false;
+  
+  // Load default durations
+  document.getElementById('youtube-default').value = data.youtubeDefault || '15';
+  document.getElementById('whatsapp-default').value = data.whatsappDefault || '15';
+}
+
+// Utility functions
 function formatTime(milliseconds) {
   const minutes = Math.floor(milliseconds / 60000);
   const hours = Math.floor(minutes / 60);
@@ -72,37 +457,56 @@ function filterSessionsByDate(sessions) {
   });
 }
 
-function calculateFocusScore(sessions) {
-  if (sessions.length === 0) return 100;
+function calculateFilteredTimeSpent(filteredSessions, totalTimeSpent) {
+  if (dateFilter === 'all') {
+    return totalTimeSpent;
+  }
   
-  let totalScore = 0;
-  let scoredSessions = 0;
+  const timeByDate = { YouTube: 0, WhatsApp: 0 };
+  const sessionsByDate = {};
   
-  sessions.forEach(session => {
-    if (session.intention) {
-      scoredSessions++;
-      let sessionScore = 50; // Base score for having an intention
-      
-      if (session.actualSearch) {
-        const similarity = calculateIntentionSimilarity(session.intention, session.actualSearch);
-        sessionScore = Math.round(similarity * 100);
-      } else {
-        // No search tracked - give benefit of doubt but reduce score slightly
-        sessionScore = 70;
-      }
-      
-      totalScore += sessionScore;
+  filteredSessions.forEach(session => {
+    const dateKey = new Date(session.timestamp).toDateString();
+    if (!sessionsByDate[dateKey]) {
+      sessionsByDate[dateKey] = { YouTube: [], WhatsApp: [] };
     }
+    sessionsByDate[dateKey][session.site].push(session);
   });
   
-  return scoredSessions > 0 ? Math.round(totalScore / scoredSessions) : 100;
+  Object.values(sessionsByDate).forEach(day => {
+    timeByDate.YouTube += day.YouTube.length * 15 * 60 * 1000; // 15 min avg
+    timeByDate.WhatsApp += day.WhatsApp.length * 10 * 60 * 1000; // 10 min avg
+  });
+  
+  return timeByDate;
+}
+
+function calculateGoalsAchieved(sessions) {
+  const uniqueSessions = getUniqueSessions(sessions);
+  const total = uniqueSessions.filter(s => s.intention).length;
+  
+  const achieved = uniqueSessions.filter(session => {
+    const reflection = sessionReflections.find(r => 
+      Math.abs(r.timestamp - session.timestamp) < 60000
+    );
+    return reflection && (reflection.outcome === 'accomplished' || reflection.outcome === 'partial');
+  }).length;
+  
+  return { achieved, total };
+}
+
+function updateChangeIndicators(sessions) {
+  // Mock positive changes for now
+  document.getElementById('time-change').textContent = '+15m from yesterday';
+  document.getElementById('session-change').textContent = '+2 from yesterday';
+  document.getElementById('goals-change').textContent = '75% success rate';
 }
 
 function calculateIntentionSimilarity(intention, actualSearch) {
   const intentionWords = intention.toLowerCase()
     .replace(/[^\w\s]/g, '')
     .split(/\s+/)
-    .filter(word => word.length > 2); // Filter out short words
+    .filter(word => word.length > 2);
     
   const searchWords = actualSearch.toLowerCase()
     .replace(/[^\w\s]/g, '')
@@ -110,21 +514,18 @@ function calculateIntentionSimilarity(intention, actualSearch) {
     .filter(word => word.length > 2);
   
   if (intentionWords.length === 0 || searchWords.length === 0) {
-    return 0.5; // Neutral score when can't compare
+    return 0.5;
   }
   
-  // Calculate semantic similarity
   let matches = 0;
   let partialMatches = 0;
   
   intentionWords.forEach(intentionWord => {
     searchWords.forEach(searchWord => {
       if (intentionWord === searchWord) {
-        matches += 2; // Exact match worth more
+        matches += 2;
       } else if (intentionWord.includes(searchWord) || searchWord.includes(intentionWord)) {
-        partialMatches += 1; // Partial match
-      } else if (getWordSimilarity(intentionWord, searchWord) > 0.7) {
-        partialMatches += 1; // Similar words (e.g., "learning" vs "learn")
+        partialMatches += 1;
       }
     });
   });
@@ -135,206 +536,127 @@ function calculateIntentionSimilarity(intention, actualSearch) {
   return Math.min(1, actualMatches / totalPossibleMatches);
 }
 
-function getWordSimilarity(word1, word2) {
-  // Simple similarity based on common characters
-  const longer = word1.length > word2.length ? word1 : word2;
-  const shorter = word1.length > word2.length ? word2 : word1;
-  
-  if (longer.length === 0) return 1;
-  
-  let matches = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    if (longer.includes(shorter[i])) {
-      matches++;
-    }
-  }
-  
-  return matches / longer.length;
-}
-
-function calculateFilteredTimeSpent(filteredSessions, totalTimeSpent) {
-  // For date filters other than 'all', we need to calculate time based on sessions
-  if (dateFilter === 'all') {
-    return totalTimeSpent;
-  }
-  
-  const timeByDate = { YouTube: 0, WhatsApp: 0 };
-  
-  // Group sessions by date and calculate approximate time
-  const sessionsByDate = {};
-  filteredSessions.forEach(session => {
-    const dateKey = new Date(session.timestamp).toDateString();
-    if (!sessionsByDate[dateKey]) {
-      sessionsByDate[dateKey] = { YouTube: [], WhatsApp: [] };
-    }
-    sessionsByDate[dateKey][session.site].push(session);
-  });
-  
-  // Estimate time per day based on session frequency (rough approximation)
-  Object.values(sessionsByDate).forEach(day => {
-    timeByDate.YouTube += day.YouTube.length * 15 * 60 * 1000; // 15 min avg per session
-    timeByDate.WhatsApp += day.WhatsApp.length * 10 * 60 * 1000; // 10 min avg per session
-  });
-  
-  return timeByDate;
-}
-
-function calculateAverageDuration(sessions) {
-  if (sessions.length === 0) return 0;
-  
-  // Group sessions by unique timestamp/intention combinations to get actual sessions
-  const uniqueSessions = [];
-  const seen = new Set();
-  
-  sessions.forEach(session => {
-    const key = `${session.timestamp}-${session.intention}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueSessions.push(session);
-    }
-  });
-  
-  // Assume average session duration based on typical usage patterns
-  const avgMinutes = uniqueSessions.reduce((sum, session) => {
-    // Estimate duration based on site and intention length
-    const baseTime = session.site === 'YouTube' ? 20 : 12; // YouTube sessions tend to be longer
-    const intentionBonus = Math.min(session.intention?.length / 10, 5); // Longer intention = more focused
-    return sum + baseTime + intentionBonus;
-  }, 0);
-  
-  return Math.round(avgMinutes / uniqueSessions.length);
-}
-
-function calculateOnTrackPercentage(sessions) {
-  if (sessions.length === 0) return 100;
-  
-  const onTrack = sessions.filter(session => {
-    if (!session.actualSearch || !session.intention) return true;
-    
-    const intentionWords = session.intention.toLowerCase().split(' ');
-    const searchWords = session.actualSearch.toLowerCase().split(' ');
-    
-    return intentionWords.some(word => 
-      searchWords.some(searchWord => searchWord.includes(word))
-    );
-  });
-  
-  return Math.round((onTrack.length / sessions.length) * 100);
-}
-
-function updateSessionsList() {
-  const sessionsList = document.getElementById('sessions-list');
-  const filteredSessions = filterSessionsByDate(allSessions);
-  const displaySessions = currentFilter === 'all' 
-    ? filteredSessions 
-    : filteredSessions.filter(s => s.site === currentFilter);
-  
-  if (displaySessions.length === 0) {
-    sessionsList.innerHTML = `
-      <div class="empty-state">
-        <p>No sessions found for the selected filter.</p>
+function showErrorState() {
+  const container = document.querySelector('.dashboard-container');
+  if (container) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 48px; color: #666;">
+        <h2>Unable to load dashboard</h2>
+        <p>Please refresh the page or check the browser console for errors.</p>
+        <button onclick="location.reload()" style="
+          padding: 12px 24px; 
+          background: #6750A4; 
+          color: white; 
+          border: none; 
+          border-radius: 8px; 
+          cursor: pointer;
+        ">
+          Refresh Page
+        </button>
       </div>
     `;
-    return;
   }
-  
-  sessionsList.innerHTML = displaySessions
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .map(session => {
-      const isMatch = checkIntentionMatch(session);
-      const icon = session.site === 'YouTube' ? '📺' : '💬';
-      const date = new Date(session.timestamp);
-      
-      return `
-        <div class="session-item">
-          <div class="session-icon">${icon}</div>
-          <div class="session-details">
-            <div class="session-intention">${session.intention}</div>
-            <div class="session-meta">
-              <span>${date.toLocaleDateString()}</span>
-              <span>${date.toLocaleTimeString()}</span>
-            </div>
-            ${session.actualSearch ? `
-              <div class="session-search">Searched: "${session.actualSearch}"</div>
-            ` : ''}
-          </div>
-          <div class="match-indicator ${isMatch ? 'good' : 'poor'}" 
-               title="${isMatch ? 'On track' : 'Distracted'}"></div>
-        </div>
-      `;
-    }).join('');
 }
 
-function checkIntentionMatch(session) {
-  if (!session.actualSearch || !session.intention) return true;
-  
-  const intentionWords = session.intention.toLowerCase().split(' ');
-  const searchWords = session.actualSearch.toLowerCase().split(' ');
-  
-  return intentionWords.some(word => 
-    searchWords.some(searchWord => searchWord.includes(word))
-  );
-}
-
-function analyzePatterns() {
-  const patternsContent = document.getElementById('patterns-content');
-  const sessions = filterSessionsByDate(allSessions);
-  
-  if (sessions.length < 5) {
-    patternsContent.innerHTML = `
-      <p class="loading">Need more sessions to analyze patterns. Keep using FocusGuard!</p>
-    `;
-    return;
-  }
-  
-  const patterns = [];
-  
-  const distractedSessions = sessions.filter(s => !checkIntentionMatch(s));
-  if (distractedSessions.length > sessions.length * 0.3) {
-    patterns.push({
-      title: 'Frequent Distractions Detected',
-      description: `${Math.round(distractedSessions.length / sessions.length * 100)}% of your sessions drift from original intentions. Try being more specific with your goals.`
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  // Date filter
+  const dateFilterEl = document.getElementById('date-filter');
+  if (dateFilterEl) {
+    dateFilterEl.addEventListener('change', (e) => {
+      dateFilter = e.target.value;
+      loadDashboardData();
     });
   }
   
-  const youtubeSessions = sessions.filter(s => s.site === 'YouTube');
-  const whatsappSessions = sessions.filter(s => s.site === 'WhatsApp');
-  
-  if (youtubeSessions.length > whatsappSessions.length * 2) {
-    patterns.push({
-      title: 'YouTube is Your Main Distraction',
-      description: 'You spend significantly more time on YouTube. Consider using playlists or bookmarks for work-related videos.'
+  // Session filters
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      currentFilter = e.target.dataset.site;
+      updateRecentSessions();
     });
-  }
-  
-  if (patterns.length === 0) {
-    patterns.push({
-      title: 'Great Focus Habits!',
-      description: 'You\'re doing well at staying on track. Keep up the good work!'
-    });
-  }
-  
-  patternsContent.innerHTML = patterns.map(pattern => `
-    <div class="pattern-item">
-      <div class="pattern-title">${pattern.title}</div>
-      <div class="pattern-description">${pattern.description}</div>
-    </div>
-  `).join('');
-}
-
-document.getElementById('date-filter').addEventListener('change', (e) => {
-  dateFilter = e.target.value;
-  loadDashboardData();
-});
-
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    e.target.classList.add('active');
-    currentFilter = e.target.dataset.site;
-    updateSessionsList();
   });
+  
+  // Settings toggle
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  if (settingsBtn && settingsPanel) {
+    settingsBtn.addEventListener('click', () => {
+      const isHidden = settingsPanel.style.display === 'none';
+      settingsPanel.style.display = isHidden ? 'block' : 'none';
+      settingsBtn.textContent = isHidden ? '✕' : '⚙️';
+    });
+  }
+  
+  // Settings form handlers
+  document.getElementById('halfway-reminders')?.addEventListener('change', saveSettings);
+  document.getElementById('reflection-prompts')?.addEventListener('change', saveSettings);
+  document.getElementById('youtube-default')?.addEventListener('change', saveSettings);
+  document.getElementById('whatsapp-default')?.addEventListener('change', saveSettings);
+  
+  // Export data button
+  document.getElementById('export-data')?.addEventListener('click', exportData);
+  
+  // Reset data button
+  document.getElementById('reset-data')?.addEventListener('click', resetData);
+  
+  // Load initial data
+  loadDashboardData();
+  
+  // Start periodic updates only if page is visible
+  if (!document.hidden) {
+    updateInterval = setInterval(loadDashboardData, 30000); // 30 seconds
+  }
 });
+
+async function saveSettings() {
+  const settings = {
+    halfwayReminders: document.getElementById('halfway-reminders').checked,
+    reflectionPrompts: document.getElementById('reflection-prompts').checked,
+    youtubeDefault: document.getElementById('youtube-default').value,
+    whatsappDefault: document.getElementById('whatsapp-default').value
+  };
+  
+  await chrome.storage.local.set(settings);
+  console.log('FocusGuard Dashboard: Settings saved');
+}
+
+async function exportData() {
+  try {
+    const data = await chrome.storage.local.get(null);
+    const jsonData = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `focusguard-data-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('FocusGuard Dashboard: Data exported');
+  } catch (error) {
+    console.error('FocusGuard Dashboard: Export failed:', error);
+    alert('Export failed. Please try again.');
+  }
+}
+
+async function resetData() {
+  if (confirm('Are you sure you want to reset all your FocusGuard data? This cannot be undone.')) {
+    try {
+      await chrome.storage.local.clear();
+      console.log('FocusGuard Dashboard: Data reset');
+      location.reload();
+    } catch (error) {
+      console.error('FocusGuard Dashboard: Reset failed:', error);
+      alert('Reset failed. Please try again.');
+    }
+  }
+}
 
 // Storage change listener for real-time updates
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -355,16 +677,14 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 // Handle visibility changes for performance
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    // Stop updates when tab is hidden
     if (updateInterval) {
       clearInterval(updateInterval);
       updateInterval = null;
     }
   } else {
-    // Resume updates when tab becomes visible
     loadDashboardData();
     if (!updateInterval) {
-      updateInterval = setInterval(loadDashboardData, 15000); // Reduced frequency
+      updateInterval = setInterval(loadDashboardData, 30000);
     }
   }
 });
@@ -380,12 +700,3 @@ function cleanup() {
 // Clean up when page unloads
 window.addEventListener('beforeunload', cleanup);
 window.addEventListener('pagehide', cleanup);
-
-document.addEventListener('DOMContentLoaded', () => {
-  loadDashboardData();
-  
-  // Start periodic updates only if page is visible
-  if (!document.hidden) {
-    updateInterval = setInterval(loadDashboardData, 15000);
-  }
-});

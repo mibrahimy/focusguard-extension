@@ -3,89 +3,335 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FocusGuard Dashboard</title>
+  <title>FocusGuard - Mindful Browsing Dashboard</title>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
   <div class="dashboard-container">
-    <header>
-      <h1>FocusGuard Dashboard</h1>
-      <div class="date-range">
-        <select id="date-filter">
-          <option value="today">Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="all">All Time</option>
-        </select>
+    <header class="dashboard-header">
+      <div class="header-content">
+        <div class="header-title">
+          <span class="header-icon">🧘‍♀️</span>
+          <div class="title-group">
+            <h1>Your Mindful Browsing Journey</h1>
+            <p class="header-subtitle">Reflect on your digital habits and celebrate your progress</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div class="date-selector">
+            <label for="date-filter" class="filter-label">Time Period:</label>
+            <select id="date-filter" class="filter-select">
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+          <button id="settings-btn" class="icon-btn" title="Settings">
+            <span class="icon">⚙️</span>
+          </button>
+        </div>
       </div>
     </header>
     
-    <div class="stats-grid">
-      <div class="stat-card">
-        <h3>Total Time Spent</h3>
-        <div class="stat-value" id="total-time">0h 0m</div>
-        <div class="stat-breakdown">
-          <div class="breakdown-item">
-            <span class="site-icon">📺</span>
-            <span>YouTube:</span>
-            <span id="youtube-total">0m</span>
+    <!-- Daily Mindfulness Overview -->
+    <section class="mindfulness-overview">
+      <div class="overview-card primary">
+        <div class="card-header">
+          <span class="card-icon">🎯</span>
+          <div class="card-title">
+            <h3>Today's Intention Score</h3>
+            <p class="card-subtitle">How well did you stick to your goals?</p>
           </div>
-          <div class="breakdown-item">
+        </div>
+        <div class="score-display">
+          <div class="score-circle">
+            <svg class="score-ring" viewBox="0 0 100 100">
+              <circle class="score-background" cx="50" cy="50" r="40"/>
+              <circle class="score-progress" cx="50" cy="50" r="40" id="intention-progress"/>
+            </svg>
+            <div class="score-text">
+              <span class="score-value" id="intention-score">85</span>
+              <span class="score-unit">%</span>
+            </div>
+          </div>
+          <div class="score-insight" id="score-insight">
+            <span class="insight-icon">✨</span>
+            <span class="insight-text">Great focus today! You stayed true to your intentions.</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="overview-stats">
+        <div class="stat-item">
+          <div class="stat-header">
+            <span class="stat-icon">⏱️</span>
+            <span class="stat-label">Mindful Time</span>
+          </div>
+          <div class="stat-value" id="mindful-time">2h 45m</div>
+          <div class="stat-change positive" id="time-change">+15m from yesterday</div>
+        </div>
+        
+        <div class="stat-item">
+          <div class="stat-header">
+            <span class="stat-icon">🎪</span>
+            <span class="stat-label">Focus Sessions</span>
+          </div>
+          <div class="stat-value" id="session-count">8</div>
+          <div class="stat-change positive" id="session-change">+2 from yesterday</div>
+        </div>
+        
+        <div class="stat-item">
+          <div class="stat-header">
+            <span class="stat-icon">🏆</span>
+            <span class="stat-label">Goals Achieved</span>
+          </div>
+          <div class="stat-value" id="goals-achieved">6/8</div>
+          <div class="stat-change neutral" id="goals-change">75% success rate</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Site Breakdown -->
+    <section class="site-breakdown">
+      <h2 class="section-title">
+        <span class="title-icon">📊</span>
+        Where You Spend Your Time
+      </h2>
+      
+      <div class="site-cards">
+        <div class="site-card youtube">
+          <div class="site-header">
+            <span class="site-icon">🎥</span>
+            <div class="site-info">
+              <h4>YouTube</h4>
+              <p class="site-purpose">Learning & Entertainment</p>
+            </div>
+          </div>
+          <div class="site-stats">
+            <div class="time-spent" id="youtube-time">1h 32m</div>
+            <div class="session-info">
+              <span id="youtube-sessions">5 sessions</span>
+              <span class="avg-duration">Avg: 18min</span>
+            </div>
+          </div>
+          <div class="intention-match">
+            <div class="match-bar">
+              <div class="match-fill youtube-match" id="youtube-match" style="width: 85%"></div>
+            </div>
+            <span class="match-label">85% intention match</span>
+          </div>
+        </div>
+        
+        <div class="site-card whatsapp">
+          <div class="site-header">
             <span class="site-icon">💬</span>
-            <span>WhatsApp:</span>
-            <span id="whatsapp-total">0m</span>
+            <div class="site-info">
+              <h4>WhatsApp</h4>
+              <p class="site-purpose">Communication & Social</p>
+            </div>
+          </div>
+          <div class="site-stats">
+            <div class="time-spent" id="whatsapp-time">1h 13m</div>
+            <div class="session-info">
+              <span id="whatsapp-sessions">3 sessions</span>
+              <span class="avg-duration">Avg: 24min</span>
+            </div>
+          </div>
+          <div class="intention-match">
+            <div class="match-bar">
+              <div class="match-fill whatsapp-match" id="whatsapp-match" style="width: 92%"></div>
+            </div>
+            <span class="match-label">92% intention match</span>
           </div>
         </div>
       </div>
-      
-      <div class="stat-card">
-        <h3>Focus Score</h3>
-        <div class="stat-value" id="focus-score">100%</div>
-        <div class="score-indicator">
-          <div class="score-bar">
-            <div class="score-fill" id="score-fill"></div>
-          </div>
-        </div>
-        <p class="score-description">Based on intention vs. actual activity match</p>
-      </div>
-      
-      <div class="stat-card">
-        <h3>Sessions Completed</h3>
-        <div class="stat-value" id="session-count">0</div>
-        <div class="session-stats">
-          <div class="session-stat">
-            <span class="stat-label">Avg. Duration:</span>
-            <span id="avg-duration">0m</span>
-          </div>
-          <div class="session-stat">
-            <span class="stat-label">On Track:</span>
-            <span id="on-track-percentage">0%</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
     
-    <div class="insights-section">
-      <h2>Session History</h2>
-      <div class="filters">
+    <!-- Mindful Insights -->
+    <section class="mindful-insights">
+      <h2 class="section-title">
+        <span class="title-icon">🔍</span>
+        Your Mindfulness Journey
+      </h2>
+      
+      <div class="insights-grid">
+        <div class="insight-card reflection">
+          <div class="insight-header">
+            <span class="insight-icon">🧠</span>
+            <h4>Self-Reflection</h4>
+          </div>
+          <div class="reflection-summary" id="reflection-summary">
+            <div class="reflection-item">
+              <span class="outcome-icon accomplished">🎉</span>
+              <span class="outcome-label">Goals Accomplished:</span>
+              <span class="outcome-count" id="accomplished-count">4</span>
+            </div>
+            <div class="reflection-item">
+              <span class="outcome-icon partial">⚡</span>
+              <span class="outcome-label">Made Progress:</span>
+              <span class="outcome-count" id="partial-count">2</span>
+            </div>
+            <div class="reflection-item">
+              <span class="outcome-icon distracted">🔄</span>
+              <span class="outcome-label">Got Distracted:</span>
+              <span class="outcome-count" id="distracted-count">2</span>
+            </div>
+          </div>
+          <div class="insight-message">
+            <p>You're building great self-awareness! Keep reflecting honestly.</p>
+          </div>
+        </div>
+        
+        <div class="insight-card habits">
+          <div class="insight-header">
+            <span class="insight-icon">📈</span>
+            <h4>Habit Trends</h4>
+          </div>
+          <div class="trend-chart" id="trend-chart">
+            <div class="trend-item improving">
+              <span class="trend-label">Morning Focus</span>
+              <div class="trend-bar">
+                <div class="trend-fill" style="width: 85%"></div>
+              </div>
+              <span class="trend-direction">↗️ Improving</span>
+            </div>
+            <div class="trend-item stable">
+              <span class="trend-label">Afternoon Sessions</span>
+              <div class="trend-bar">
+                <div class="trend-fill" style="width: 65%"></div>
+              </div>
+              <span class="trend-direction">→ Stable</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="insight-card goals">
+          <div class="insight-header">
+            <span class="insight-icon">🎯</span>
+            <h4>Goal Patterns</h4>
+          </div>
+          <div class="goal-insights" id="goal-insights">
+            <div class="goal-insight">
+              <span class="goal-category">Learning</span>
+              <span class="goal-success">90% success</span>
+            </div>
+            <div class="goal-insight">
+              <span class="goal-category">Communication</span>
+              <span class="goal-success">85% success</span>
+            </div>
+            <div class="goal-insight">
+              <span class="goal-category">Entertainment</span>
+              <span class="goal-success">70% success</span>
+            </div>
+          </div>
+          <div class="insight-tip">
+            <span class="tip-icon">💡</span>
+            <span>You focus best on learning goals!</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent Mindful Sessions -->
+    <section class="recent-sessions">
+      <h2 class="section-title">
+        <span class="title-icon">📝</span>
+        Recent Mindful Sessions
+      </h2>
+      
+      <div class="session-filters">
         <button class="filter-btn active" data-site="all">All Sites</button>
-        <button class="filter-btn" data-site="YouTube">YouTube</button>
-        <button class="filter-btn" data-site="WhatsApp">WhatsApp</button>
+        <button class="filter-btn" data-site="YouTube">🎥 YouTube</button>
+        <button class="filter-btn" data-site="WhatsApp">💬 WhatsApp</button>
       </div>
       
-      <div id="sessions-list" class="sessions-list">
+      <div id="sessions-list" class="sessions-timeline">
         <div class="empty-state">
-          <p>No sessions yet. Visit YouTube or WhatsApp to start tracking!</p>
+          <span class="empty-icon">🌱</span>
+          <h3>Your mindful journey starts here</h3>
+          <p>Visit YouTube or WhatsApp and set an intention to see your sessions appear!</p>
+          <div class="empty-actions">
+            <button class="start-session-btn" onclick="chrome.tabs.create({url: 'https://youtube.com'})">
+              <span class="btn-icon">🎥</span>
+              Try YouTube
+            </button>
+            <button class="start-session-btn" onclick="chrome.tabs.create({url: 'https://web.whatsapp.com'})">
+              <span class="btn-icon">💬</span>
+              Try WhatsApp
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-    
-    <div class="patterns-section">
-      <h2>Distraction Patterns</h2>
-      <div id="patterns-content">
-        <p class="loading">Analyzing your browsing patterns...</p>
+    </section>
+
+    <!-- Settings Panel -->
+    <section class="settings-panel" id="settings-panel" style="display: none;">
+      <h2 class="section-title">
+        <span class="title-icon">⚙️</span>
+        Mindfulness Settings
+      </h2>
+      
+      <div class="settings-grid">
+        <div class="setting-group">
+          <h4>Reminder Preferences</h4>
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="halfway-reminders" checked>
+              <span class="checkmark"></span>
+              Show halfway reminders
+            </label>
+            <p class="setting-description">Get a gentle nudge halfway through your session</p>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">
+              <input type="checkbox" id="reflection-prompts" checked>
+              <span class="checkmark"></span>
+              Enable reflection prompts
+            </label>
+            <p class="setting-description">Reflect on your session when time is up</p>
+          </div>
+        </div>
+        
+        <div class="setting-group">
+          <h4>Default Session Lengths</h4>
+          <div class="setting-item">
+            <label class="setting-label">YouTube sessions:</label>
+            <select id="youtube-default" class="setting-select">
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+              <option value="60">1 hour</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">WhatsApp sessions:</label>
+            <select id="whatsapp-default" class="setting-select">
+              <option value="10">10 minutes</option>
+              <option value="15">15 minutes</option>
+              <option value="30">30 minutes</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="setting-group">
+          <h4>Data & Privacy</h4>
+          <div class="setting-item">
+            <button class="setting-btn secondary" id="export-data">
+              <span class="btn-icon">📊</span>
+              Export My Data
+            </button>
+            <p class="setting-description">Download your mindfulness data</p>
+          </div>
+          <div class="setting-item">
+            <button class="setting-btn danger" id="reset-data">
+              <span class="btn-icon">🗑️</span>
+              Reset All Data
+            </button>
+            <p class="setting-description">Clear all sessions and start fresh</p>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   </div>
   
   <script src="dashboard.js"></script>
