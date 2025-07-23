@@ -1,0 +1,175 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  width: 320px;
+  background: #f9fafb;
+}
+
+.popup-container {
+  padding: 20px;
+}
+
+h1 {
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  color: #1a1a1a;
+  text-align: center;
+}
+
+h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.status-text {
+  margin: 0;
+  font-size: 16px;
+  color: #1a1a1a;
+  font-weight: 500;
+}
+
+.help-text {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.session-info {
+  margin-bottom: 16px;
+}
+
+.site-name {
+  font-size: 18px;
+  font-weight: 500;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+}
+
+.intention-text {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #f3f4f6;
+  border-radius: 6px;
+}
+
+.timer-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 500;
+  color: #4F46E5;
+}
+
+.stats-summary {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.stat-row span:first-child {
+  color: #666;
+}
+
+.stat-row span:last-child {
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.action-buttons button {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#dashboard-btn {
+  background: #4F46E5;
+  color: white;
+}
+
+#dashboard-btn:hover {
+  background: #4338CA;
+}
+
+#settings-btn {
+  background: #f3f4f6;
+  color: #666;
+}
+
+#settings-btn:hover {
+  background: #e5e7eb;
+}
+
+.danger-btn {
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #EF4444;
+  color: white;
+  transition: all 0.2s;
+}
+
+.danger-btn:hover {
+  background: #DC2626;
+}
+
+.quick-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+}
+
+.quick-btn {
+  padding: 8px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  color: #4F46E5;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-btn:hover {
+  background: #f9fafb;
+  border-color: #4F46E5;
+}

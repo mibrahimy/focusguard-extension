@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusGuard Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="dashboard-container">
+    <header>
+      <h1>FocusGuard Dashboard</h1>
+      <div class="date-range">
+        <select id="date-filter">
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="all">All Time</option>
+        </select>
+      </div>
+    </header>
+    
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Total Time Spent</h3>
+        <div class="stat-value" id="total-time">0h 0m</div>
+        <div class="stat-breakdown">
+          <div class="breakdown-item">
+            <span class="site-icon">📺</span>
+            <span>YouTube:</span>
+            <span id="youtube-total">0m</span>
+          </div>
+          <div class="breakdown-item">
+            <span class="site-icon">💬</span>
+            <span>WhatsApp:</span>
+            <span id="whatsapp-total">0m</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <h3>Focus Score</h3>
+        <div class="stat-value" id="focus-score">100%</div>
+        <div class="score-indicator">
+          <div class="score-bar">
+            <div class="score-fill" id="score-fill"></div>
+          </div>
+        </div>
+        <p class="score-description">Based on intention vs. actual activity match</p>
+      </div>
+      
+      <div class="stat-card">
+        <h3>Sessions Completed</h3>
+        <div class="stat-value" id="session-count">0</div>
+        <div class="session-stats">
+          <div class="session-stat">
+            <span class="stat-label">Avg. Duration:</span>
+            <span id="avg-duration">0m</span>
+          </div>
+          <div class="session-stat">
+            <span class="stat-label">On Track:</span>
+            <span id="on-track-percentage">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="insights-section">
+      <h2>Session History</h2>
+      <div class="filters">
+        <button class="filter-btn active" data-site="all">All Sites</button>
+        <button class="filter-btn" data-site="YouTube">YouTube</button>
+        <button class="filter-btn" data-site="WhatsApp">WhatsApp</button>
+      </div>
+      
+      <div id="sessions-list" class="sessions-list">
+        <div class="empty-state">
+          <p>No sessions yet. Visit YouTube or WhatsApp to start tracking!</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="patterns-section">
+      <h2>Distraction Patterns</h2>
+      <div id="patterns-content">
+        <p class="loading">Analyzing your browsing patterns...</p>
+      </div>
+    </div>
+  </div>
+  
+  <script src="dashboard.js"></script>
+</body>
+</html>

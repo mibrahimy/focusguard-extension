@@ -1,0 +1,947 @@
+/* Removed external font import to prevent CSP violations and privacy leaks */
+/* Using system fonts with fallbacks for better performance and privacy */
+
+:root {
+  --md-sys-color-primary: #6750A4;
+  --md-sys-color-on-primary: #FFFFFF;
+  --md-sys-color-primary-container: #EADDFF;
+  --md-sys-color-on-primary-container: #21005D;
+  --md-sys-color-surface: #FFFBFE;
+  --md-sys-color-on-surface: #1C1B1F;
+  --md-sys-color-surface-variant: #E7E0EC;
+  --md-sys-color-on-surface-variant: #49454F;
+  --md-sys-color-outline: #79747E;
+  --md-sys-color-outline-variant: #CAC4D0;
+  --md-sys-color-error: #BA1A1A;
+  --md-sys-color-on-error: #FFFFFF;
+  --md-sys-color-error-container: #FFDAD6;
+  --md-sys-color-on-error-container: #410002;
+  --md-sys-color-scrim: #000000;
+  
+  --md-elevation-1: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+  --md-elevation-2: 0px 1px 2px 0px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+  --md-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3);
+  --md-elevation-4: 0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px 0px rgba(0, 0, 0, 0.3);
+  --md-elevation-5: 0px 8px 12px 6px rgba(0, 0, 0, 0.15), 0px 4px 4px 0px rgba(0, 0, 0, 0.3);
+}
+
+.focusguard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999999;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.focusguard-overlay.active {
+  opacity: 1;
+}
+
+.focusguard-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--md-sys-color-scrim);
+  opacity: 0.32;
+}
+
+.focusguard-modal {
+  position: relative;
+  background: var(--md-sys-color-surface);
+  border-radius: 28px;
+  max-width: 560px;
+  width: calc(100% - 48px);
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  box-shadow: var(--md-elevation-3);
+  transform: scale(0.8) translateY(40px);
+  transition: transform 0.3s cubic-bezier(0.05, 0.7, 0.1, 1.0);
+}
+
+.focusguard-overlay.active .focusguard-modal {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  padding: 24px 24px 16px;
+  text-align: center;
+}
+
+.site-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.modal-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+  color: var(--md-sys-color-on-surface);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.mindfulness-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 12px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.tip-icon {
+  font-size: 14px;
+}
+
+.modal-content {
+  padding: 0 24px 24px;
+}
+
+.reflection-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(103, 80, 164, 0.08);
+  border-radius: 12px;
+  border-left: 4px solid var(--md-sys-color-primary);
+}
+
+.reflection-question {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.question-icon {
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.question-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+  line-height: 1.4;
+}
+
+.helpful-hints {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.8;
+}
+
+.hint-icon {
+  font-size: 12px;
+}
+
+.suggestions-container {
+  margin-bottom: 20px;
+}
+
+.suggestion-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.suggestion-chip {
+  background: var(--md-sys-color-surface-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.suggestion-chip:hover {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-color: var(--md-sys-color-primary);
+}
+
+.suggestion-chip.selected {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  border-color: var(--md-sys-color-primary);
+}
+
+.input-field {
+  position: relative;
+  margin-bottom: 32px;
+}
+
+.input-validation {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: all 0.2s ease;
+}
+
+.input-validation.warning {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.input-validation.success {
+  background: rgba(76, 175, 80, 0.1);
+  color: #2E7D32;
+}
+
+.input-validation.suggestion {
+  background: rgba(255, 193, 7, 0.1);
+  color: #F57C00;
+}
+
+.input-validation.neutral {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+#intention-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 4px;
+  font-size: 16px;
+  font-family: inherit;
+  line-height: 24px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface);
+  resize: vertical;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+#intention-input:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 1px var(--md-sys-color-primary);
+}
+
+#intention-input.error {
+  border-color: var(--md-sys-color-error);
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.floating-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-surface);
+}
+
+.field-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+  margin-bottom: 12px;
+}
+
+.time-selector {
+  margin-bottom: 16px;
+}
+
+.duration-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.duration-chip {
+  padding: 8px 16px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 8px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.duration-chip:hover {
+  background: var(--md-sys-color-surface-variant);
+}
+
+.duration-chip.active {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-color: var(--md-sys-color-primary);
+}
+
+.custom-duration {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-variant);
+}
+
+.duration-input {
+  width: 60px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+  text-align: center;
+}
+
+.duration-input:focus {
+  outline: none;
+}
+
+.duration-label {
+  font-size: 14px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 24px;
+  background: var(--md-sys-color-surface);
+}
+
+.btn-text {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: background-color 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.btn-text:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
+
+.btn-primary {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 20px;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: var(--md-elevation-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary:hover {
+  box-shadow: var(--md-elevation-2);
+  background: color-mix(in srgb, var(--md-sys-color-on-primary) 8%, var(--md-sys-color-primary));
+}
+
+.btn-primary:active {
+  box-shadow: var(--md-elevation-1);
+}
+
+.btn-primary.loading {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.btn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--md-sys-color-on-primary) 20%, transparent);
+  transform: scale(0);
+  pointer-events: none;
+}
+
+.btn-ripple.animate {
+  animation: ripple 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@keyframes ripple {
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--md-sys-color-on-primary);
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Timer styles with Material Design */
+.focusguard-timer {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 16px;
+  box-shadow: var(--md-elevation-2);
+  z-index: 999998;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  min-width: 200px;
+  max-width: 350px;
+}
+
+.focusguard-timer.warning {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+  animation: pulse 1s infinite;
+}
+
+.focusguard-timer.paused {
+  opacity: 0.7;
+  background: var(--md-sys-color-surface-variant);
+}
+
+.focusguard-timer.minimized {
+  min-width: auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+}
+
+.focusguard-timer.minimized .timer-content {
+  padding: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.focusguard-timer.minimized .timer-header {
+  justify-content: center;
+}
+
+.focusguard-timer.minimized .timer-text,
+.focusguard-timer.minimized .timer-pause,
+.focusguard-timer.minimized .timer-intention,
+.focusguard-timer.minimized .timer-progress,
+.focusguard-timer.minimized .mindful-reminder {
+  display: none;
+}
+
+.focusguard-timer.final-countdown {
+  animation: gentle-pulse 1s infinite;
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { 
+    transform: scale(1); 
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.02); 
+    opacity: 0.95;
+  }
+}
+
+.timer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  padding: 12px 16px;
+}
+
+.timer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.timer-intention {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.intention-icon {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.intention-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.timer-pause,
+.timer-minimize {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.timer-pause:hover,
+.timer-minimize:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.timer-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 16px 16px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--md-sys-color-primary);
+  transition: width 0.3s ease;
+  border-radius: 0 0 16px 16px;
+}
+
+.mindful-reminder {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  padding: 8px 12px;
+  border-radius: 12px;
+  box-shadow: var(--md-elevation-2);
+  font-size: 12px;
+  white-space: nowrap;
+  animation: slideInDown 0.3s ease;
+  z-index: 1000;
+}
+
+.reminder-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reminder-icon {
+  font-size: 14px;
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+/* Notification styles */
+.focusguard-notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  background: var(--md-sys-color-surface);
+  border-radius: 28px;
+  padding: 24px;
+  box-shadow: var(--md-elevation-3);
+  z-index: 999999;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  max-width: 400px;
+  width: calc(100% - 48px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.focusguard-notification.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.focusguard-notification.enhanced {
+  max-width: 480px;
+  padding: 32px;
+}
+
+.notification-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.notification-icon {
+  font-size: 24px;
+}
+
+.session-summary {
+  margin-bottom: 24px;
+}
+
+.intention-reminder {
+  font-size: 14px;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: 16px;
+}
+
+.intention-reminder strong {
+  color: var(--md-sys-color-primary);
+}
+
+.reflection-prompt {
+  font-size: 16px;
+  color: var(--md-sys-color-on-surface);
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.reflection-options {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.intention-reminder {
+  padding: 16px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.reminder-label {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.intention-text {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.reflection-questions {
+  margin-bottom: 20px;
+}
+
+.reflection-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0 0;
+}
+
+.reflection-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.reflection-checklist li:before {
+  content: "•";
+  color: var(--md-sys-color-primary);
+  font-weight: bold;
+}
+
+.reflection-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 16px 12px;
+  background: var(--md-sys-color-surface-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  border: 2px solid transparent;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.reflection-btn .subtext {
+  font-size: 11px;
+  opacity: 0.8;
+  text-align: center;
+}
+
+.reflection-btn:hover {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+
+.reflection-btn.selected {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  border-color: var(--md-sys-color-primary);
+  transform: scale(1.05);
+}
+
+.reflection-btn .emoji {
+  font-size: 20px;
+}
+
+.session-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.encouragement-message {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 12px;
+  animation: slideIn 0.3s ease;
+}
+
+.encouragement-message p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mindfulness-quote {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background: rgba(103, 80, 164, 0.08);
+  border-radius: 12px;
+  border-left: 3px solid var(--md-sys-color-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quote-icon {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.quote-text {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.4;
+}
+
+.reflection-feedback {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-radius: 12px;
+  animation: slideIn 0.3s ease;
+}
+
+.feedback-content p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.appreciation-message {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.appreciation-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.appreciation-icon {
+  font-size: 32px;
+}
+
+.appreciation-content p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+  line-height: 1.4;
+}
+
+.notification-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--md-sys-color-on-surface);
+}
+
+.notification-content p {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 20px;
+}
+
+.notification-content button {
+  margin-right: 8px;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  font-family: inherit;
+}
+
+#extend-btn {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-elevation-1);
+}
+
+#extend-btn:hover {
+  box-shadow: var(--md-elevation-2);
+}
+
+#end-session-btn {
+  background: transparent;
+  color: var(--md-sys-color-primary);
+}
+
+#end-session-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+  .focusguard-modal {
+    width: calc(100% - 32px);
+    border-radius: 28px 28px 0 0;
+    max-height: 90vh;
+    position: fixed;
+    bottom: 0;
+    top: auto;
+    transform: translateY(100%);
+  }
+  
+  .focusguard-overlay.active .focusguard-modal {
+    transform: translateY(0);
+  }
+  
+  .duration-chips {
+    justify-content: center;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .btn-primary,
+  .btn-text {
+    width: 100%;
+    justify-content: center;
+  }
+}

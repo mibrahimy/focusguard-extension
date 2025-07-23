@@ -1,0 +1,561 @@
+// Fallback intention detector that runs on YouTube and WhatsApp pages
+
+const MONITORED_SITES = {
+  'youtube.com': 'YouTube',
+  'whatsapp.com': 'WhatsApp',
+  'web.whatsapp.com': 'WhatsApp'
+};
+
+let intentionOverlay = null;
+let hasShownPrompt = false;
+
+function getSiteName() {
+  const hostname = window.location.hostname.replace('www.', '');
+  for (const [site, siteName] of Object.entries(MONITORED_SITES)) {
+    if (hostname.includes(site)) {
+      return siteName;
+    }
+  }
+  return null;
+}
+
+async function checkIntentionNeeded() {
+  const siteName = getSiteName();
+  if (!siteName || hasShownPrompt) return;
+  
+  console.log('FocusGuard: Checking intention for', siteName);
+  
+  try {
+    const result = await chrome.storage.local.get(['intention']);
+    const intentions = result.intention || {};
+    
+    console.log('FocusGuard: Current intentions:', intentions);
+    
+    if (!intentions[siteName] || Date.now() - intentions[siteName].timestamp > 300000) {
+      console.log('FocusGuard: Need to show intention prompt');
+      hasShownPrompt = true;
+      showIntentionOverlay(siteName);
+    } else {
+      console.log('FocusGuard: Recent intention found, continuing normally');
+    }
+  } catch (error) {
+    console.error('FocusGuard: Error checking intentions:', error);
+  }
+}
+
+// Enhanced input sanitization function
+function sanitizeInput(input, maxLength = 500) {
+  if (typeof input !== 'string') return '';
+  
+  return input
+    .trim()
+    .slice(0, maxLength)
+    .replace(/[<>"'&]/g, (match) => {
+      const escapeMap = { 
+        '<': '&lt;', 
+        '>': '&gt;', 
+        '"': '&quot;', 
+        "'": '&#x27;', 
+        '&': '&amp;' 
+      };
+      return escapeMap[match];
+    })
+    .replace(/javascript:/gi, '')
+    .replace(/data:/gi, '')
+    .replace(/vbscript:/gi, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
+function showIntentionOverlay(siteName) {
+  // Wait for DOM to be ready before manipulating
+  if (!document.body) {
+    setTimeout(() => showIntentionOverlay(siteName), 100);
+    return;
+  }
+  
+  // Hide the page content safely
+  if (document.documentElement) {
+    document.documentElement.style.overflow = 'hidden';
+  }
+  
+  // Sanitize siteName to prevent XSS
+  const sanitizedSiteName = sanitizeInput(siteName, 50);
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'focusguard-overlay';
+  overlay.innerHTML = `
+    <div class="focusguard-backdrop" aria-hidden="true"></div>
+    <div class="focusguard-modal" role="dialog" aria-modal="true" aria-labelledby="focus-title" aria-describedby="focus-subtitle">
+      <div class="modal-header">
+        <div class="site-icon" aria-hidden="true">${siteName === 'YouTube' ? '🎥' : '💬'}</div>
+        <h2 id="focus-title">What brings you to ${sanitizedSiteName}?</h2>
+        <p id="focus-subtitle" class="subtitle">Set your intention to maintain focus</p>
+      </div>
+      
+      <div class="modal-content">
+        <div class="suggestions-container" id="suggestions-container" style="display: none;">
+          <label class="field-label">Quick suggestions:</label>
+          <div class="suggestion-chips" id="suggestion-chips"></div>
+        </div>
+        
+        <div class="input-field">
+          <textarea 
+            id="intention-input" 
+            placeholder="${siteName === 'YouTube' ? 'e.g., Watch Python tutorial, Research cooking recipes, Listen to focus music...' : 'e.g., Message family, Check work updates, Share documents...'}"
+            rows="3"
+            aria-label="Your intention for this browsing session"
+            aria-describedby="input-validation"
+            required
+          ></textarea>
+          <label class="floating-label" for="intention-input">Your intention</label>
+          <div class="input-validation" id="input-validation" aria-live="polite"></div>
+        </div>
+        
+        <div class="time-selector">
+          <label class="field-label">Session duration</label>
+          <div class="duration-chips">
+            <button class="duration-chip" data-duration="5">5 min</button>
+            <button class="duration-chip active" data-duration="15">15 min</button>
+            <button class="duration-chip" data-duration="30">30 min</button>
+            <button class="duration-chip" data-duration="60">1 hour</button>
+          </div>
+          <div class="custom-duration">
+            <input type="number" id="duration-input" min="1" max="120" value="15" class="duration-input">
+            <span class="duration-label">minutes</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button id="skip-btn" class="btn-text">Skip for now</button>
+        <button id="set-intention-btn" class="btn-primary">
+          <span class="btn-text">Begin focused session</span>
+          <div class="btn-ripple"></div>
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  intentionOverlay = overlay;
+  
+  // Implement focus trap for accessibility
+  const focusableElements = overlay.querySelectorAll(
+    'button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])'
+  );
+  const firstFocusable = focusableElements[0];
+  const lastFocusable = focusableElements[focusableElements.length - 1];
+  
+  const trapFocus = (e) => {
+    if (e.key === 'Tab') {
+      if (e.shiftKey) {
+        if (document.activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable.focus();
+        }
+      } else {
+        if (document.activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable.focus();
+        }
+      }
+    }
+  };
+  
+  overlay.addEventListener('keydown', trapFocus);
+  
+  // Add event listeners with error handling
+  overlay.querySelectorAll('.duration-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      try {
+        overlay.querySelectorAll('.duration-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        const durationInput = document.getElementById('duration-input');
+        if (durationInput) {
+          durationInput.value = chip.dataset.duration;
+        }
+      } catch (error) {
+        console.error('FocusGuard: Error handling duration chip click:', error);
+      }
+    });
+  });
+  
+  // Add keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.getElementById('skip-btn').click();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      const textarea = document.getElementById('intention-input');
+      if (document.activeElement === textarea && textarea.value.trim()) {
+        e.preventDefault();
+        document.getElementById('set-intention-btn').click();
+      }
+    }
+  });
+  
+  document.getElementById('duration-input').addEventListener('input', () => {
+    overlay.querySelectorAll('.duration-chip').forEach(c => c.classList.remove('active'));
+  });
+  
+  // Add intention validation and suggestions with error handling
+  const intentionInput = document.getElementById('intention-input');
+  const validationDiv = document.getElementById('input-validation');
+  
+  // Load and show suggestions
+  setTimeout(() => {
+    try {
+      loadIntentionSuggestions(siteName);
+    } catch (error) {
+      console.error('FocusGuard: Error loading suggestions:', error);
+    }
+  }, 100);
+  
+  // Real-time validation with null checks
+  if (intentionInput && validationDiv) {
+    intentionInput.addEventListener('input', () => {
+      try {
+        validateIntention(intentionInput.value, validationDiv);
+      } catch (error) {
+        console.error('FocusGuard: Error validating intention:', error);
+      }
+    });
+  } else {
+    console.warn('FocusGuard: Intention input or validation div not found');
+  }
+  
+  document.getElementById('set-intention-btn').addEventListener('click', () => {
+    try {
+      const intentionInput = document.getElementById('intention-input');
+      const durationInput = document.getElementById('duration-input');
+      const btn = document.getElementById('set-intention-btn');
+      
+      if (!intentionInput || !durationInput || !btn) {
+        console.error('FocusGuard: Required elements not found');
+        return;
+      }
+      
+      const rawIntention = intentionInput.value.trim();
+      const duration = parseInt(durationInput.value) || 15;
+      
+      // Sanitize and validate input
+      const sanitizedIntention = sanitizeInput(rawIntention, 500);
+      
+      if (!sanitizedIntention || sanitizedIntention.length < 3) {
+        intentionInput.classList.add('error');
+        intentionInput.focus();
+        setTimeout(() => intentionInput.classList.remove('error'), 3000);
+        return;
+      }
+      
+      console.log('FocusGuard: Setting intention:', sanitizedIntention, 'Duration:', duration);
+      
+      btn.classList.add('loading');
+      btn.innerHTML = '<span class="spinner"></span><span class="btn-text">Starting session...</span>';
+      
+      chrome.runtime.sendMessage({
+        action: 'setIntention',
+        site: siteName,
+        intention: sanitizedIntention,
+        duration
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('FocusGuard: Error setting intention:', chrome.runtime.lastError);
+          btn.classList.remove('loading');
+          btn.innerHTML = '<span class="btn-text">Error - Try again</span>';
+          btn.style.background = 'var(--md-sys-color-error)';
+          setTimeout(() => {
+            btn.innerHTML = '<span class="btn-text">Begin focused session</span><div class="btn-ripple"></div>';
+            btn.style.background = '';
+            addRippleEffect(btn);
+          }, 3000);
+          return;
+        }
+        
+        console.log('FocusGuard: Intention set response:', response);
+        removeOverlay();
+        
+        // Start timer
+        try {
+          showFocusTimer(duration);
+        } catch (timerError) {
+          console.error('FocusGuard: Error starting timer:', timerError);
+        }
+      });
+    } catch (error) {
+      console.error('FocusGuard: Error in set intention handler:', error);
+      const btn = document.getElementById('set-intention-btn');
+      if (btn) {
+        btn.classList.remove('loading');
+        btn.innerHTML = '<span class="btn-text">Error - Try again</span>';
+      }
+    }
+  });
+  
+  document.getElementById('skip-btn').addEventListener('click', () => {
+    console.log('FocusGuard: User skipped intention setting');
+    removeOverlay();
+  });
+  
+  // Add ripple effect
+  addRippleEffect(overlay.querySelector('#set-intention-btn'));
+  
+  // Show overlay with animation
+  setTimeout(() => {
+    overlay.classList.add('active');
+    document.getElementById('intention-input').focus();
+  }, 100);
+}
+
+function removeOverlay() {
+  if (intentionOverlay) {
+    intentionOverlay.classList.remove('active');
+    setTimeout(() => {
+      if (intentionOverlay) {
+        intentionOverlay.remove();
+        intentionOverlay = null;
+        document.documentElement.style.overflow = '';
+      }
+    }, 300);
+  }
+}
+
+function addRippleEffect(button) {
+  button.addEventListener('click', function(e) {
+    const ripple = this.querySelector('.btn-ripple');
+    const rect = this.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const x = e.clientX - rect.left - size / 2;
+    const y = e.clientY - rect.top - size / 2;
+    
+    ripple.style.width = ripple.style.height = size + 'px';
+    ripple.style.left = x + 'px';
+    ripple.style.top = y + 'px';
+    ripple.classList.add('animate');
+    
+    setTimeout(() => {
+      ripple.classList.remove('animate');
+    }, 600);
+  });
+}
+
+function showFocusTimer(duration) {
+  try {
+    // Validate duration
+    if (!duration || duration < 1 || duration > 480) {
+      console.warn('FocusGuard: Invalid timer duration:', duration);
+      return;
+    }
+    
+    // Remove existing timer safely
+    const existingTimer = document.querySelector('.focusguard-timer');
+    if (existingTimer) existingTimer.remove();
+    
+    // Ensure body exists
+    if (!document.body) {
+      console.error('FocusGuard: Document body not available for timer');
+      return;
+    }
+    
+    const timer = document.createElement('div');
+    timer.className = 'focusguard-timer';
+    timer.innerHTML = `
+      <div class="timer-content">
+        <span class="timer-icon">⏱️</span>
+        <span class="timer-text">${duration}:00</span>
+      </div>
+    `;
+    
+    document.body.appendChild(timer);
+    
+    let timeLeft = duration * 60;
+    const timerInterval = setInterval(() => {
+      try {
+        timeLeft--;
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        
+        const timerText = timer.querySelector('.timer-text');
+        if (timerText) {
+          timerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+        
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          timer.remove();
+          showTimeUpNotification();
+        }
+      } catch (error) {
+        console.error('FocusGuard: Error updating timer:', error);
+        clearInterval(timerInterval);
+      }
+    }, 1000);
+  } catch (error) {
+    console.error('FocusGuard: Error creating timer:', error);
+  }
+}
+
+function showTimeUpNotification() {
+  const notification = document.createElement('div');
+  notification.className = 'focusguard-notification';
+  notification.innerHTML = `
+    <div class="notification-content">
+      <h3>Time's up!</h3>
+      <p>Your focused session has ended. Did you accomplish your goal?</p>
+      <button id="extend-btn">Extend 5 minutes</button>
+      <button id="end-session-btn">End session</button>
+    </div>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  document.getElementById('extend-btn').addEventListener('click', () => {
+    notification.remove();
+    showFocusTimer(5);
+  });
+  
+  document.getElementById('end-session-btn').addEventListener('click', () => {
+    notification.remove();
+  });
+}
+
+// Check for intention when page loads
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', checkIntentionNeeded);
+} else {
+  checkIntentionNeeded();
+}
+
+// Also check after a short delay to catch dynamic page loads
+setTimeout(checkIntentionNeeded, 1000);
+
+// Intention suggestions and validation functions
+function loadIntentionSuggestions(siteName) {
+  const suggestions = getIntentionSuggestions(siteName);
+  const suggestionsContainer = document.getElementById('suggestions-container');
+  const suggestionChips = document.getElementById('suggestion-chips');
+  
+  if (!suggestionsContainer || !suggestionChips) {
+    console.warn('FocusGuard: Suggestions elements not found');
+    return;
+  }
+  
+  if (suggestions.length > 0) {
+    try {
+      // Sanitize suggestions before adding to DOM
+      const sanitizedSuggestions = suggestions.map(suggestion => sanitizeInput(suggestion, 100));
+      
+      suggestionChips.innerHTML = sanitizedSuggestions.map(suggestion => 
+        `<button class="suggestion-chip" data-suggestion="${suggestion}">${suggestion}</button>`
+      ).join('');
+      
+      suggestionsContainer.style.display = 'block';
+      
+      // Add click handlers with error handling
+      suggestionChips.querySelectorAll('.suggestion-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          try {
+            const intentionInput = document.getElementById('intention-input');
+            const validationDiv = document.getElementById('input-validation');
+            
+            if (intentionInput && validationDiv) {
+              intentionInput.value = chip.dataset.suggestion;
+              validateIntention(chip.dataset.suggestion, validationDiv);
+              chip.classList.add('selected');
+              setTimeout(() => {
+                if (suggestionsContainer) {
+                  suggestionsContainer.style.display = 'none';
+                }
+              }, 500);
+            }
+          } catch (error) {
+            console.error('FocusGuard: Error handling suggestion click:', error);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('FocusGuard: Error loading suggestions:', error);
+    }
+  }
+}
+
+function getIntentionSuggestions(siteName) {
+  const suggestions = {
+    'YouTube': [
+      'Learn about a specific topic',
+      'Watch educational content',
+      'Research for work project',
+      'Listen to focus music',
+      'Follow tutorial walkthrough',
+      'Check industry news updates'
+    ],
+    'WhatsApp': [
+      'Message family members',
+      'Coordinate work meeting',
+      'Share important documents',
+      'Check team updates',
+      'Plan social event',
+      'Respond to urgent messages'
+    ]
+  };
+  
+  return suggestions[siteName] || [];
+}
+
+function validateIntention(intention, validationDiv) {
+  if (!validationDiv) {
+    console.warn('FocusGuard: Validation div not found');
+    return;
+  }
+  
+  const trimmed = intention.trim();
+  
+  // Clear previous validation safely
+  try {
+    validationDiv.innerHTML = '';
+    validationDiv.className = 'input-validation';
+  } catch (error) {
+    console.error('FocusGuard: Error clearing validation div:', error);
+    return;
+  }
+  
+  if (trimmed.length === 0) {
+    return;
+  }
+  
+  try {
+    if (trimmed.length < 5) {
+      validationDiv.innerHTML = '⚠️ Try to be more specific about your goal';
+      validationDiv.classList.add('warning');
+    } else if (trimmed.length > 100) {
+      validationDiv.innerHTML = '⚠️ Keep it concise (under 100 characters)';
+      validationDiv.classList.add('warning');
+    } else if (isVagueIntention(trimmed)) {
+      validationDiv.innerHTML = '💡 Try to be more specific about what you want to accomplish';
+      validationDiv.classList.add('suggestion');
+    } else if (isProductiveIntention(trimmed)) {
+      validationDiv.innerHTML = '✅ Great! This sounds like a focused goal';
+      validationDiv.classList.add('success');
+    } else {
+      validationDiv.innerHTML = '👍 Good intention! Stay focused on your goal';
+      validationDiv.classList.add('neutral');
+    }
+  } catch (error) {
+    console.error('FocusGuard: Error setting validation message:', error);
+  }
+}
+
+function isVagueIntention(intention) {
+  const vagueWords = ['browse', 'look', 'see', 'check', 'watch', 'something', 'stuff', 'things'];
+  const words = intention.toLowerCase().split(/\s+/);
+  
+  // If intention is mostly vague words
+  const vagueCount = words.filter(word => vagueWords.includes(word)).length;
+  return vagueCount / words.length > 0.5;
+}
+
+function isProductiveIntention(intention) {
+  const productiveWords = ['learn', 'study', 'research', 'tutorial', 'course', 'work', 'project', 'create', 'build', 'solve', 'understand'];
+  const words = intention.toLowerCase().split(/\s+/);
+  
+  return words.some(word => productiveWords.includes(word));
+}

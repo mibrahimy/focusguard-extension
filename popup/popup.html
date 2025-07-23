@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FocusGuard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <h1>FocusGuard</h1>
+    
+    <div id="no-session" class="section">
+      <p class="status-text">Ready to focus</p>
+      <p class="help-text">Navigate to YouTube or WhatsApp to set your intention</p>
+      <div class="quick-actions">
+        <button id="test-youtube" class="quick-btn">Test with YouTube</button>
+        <button id="test-whatsapp" class="quick-btn">Test with WhatsApp</button>
+      </div>
+    </div>
+    
+    <div id="active-session" class="section" style="display: none;">
+      <h3>Current Session</h3>
+      <div class="session-info">
+        <div class="site-name"></div>
+        <div class="intention-text"></div>
+        <div class="timer-display">
+          <span class="timer-icon">⏱️</span>
+          <span class="time-remaining"></span>
+        </div>
+      </div>
+      <button id="end-session-btn" class="danger-btn">End Session</button>
+    </div>
+    
+    <div class="stats-summary">
+      <h3>Today's Stats</h3>
+      <div class="stat-row">
+        <span>YouTube:</span>
+        <span id="youtube-time">0 min</span>
+      </div>
+      <div class="stat-row">
+        <span>WhatsApp:</span>
+        <span id="whatsapp-time">0 min</span>
+      </div>
+      <div class="stat-row">
+        <span>Focus Score:</span>
+        <span id="focus-score">100%</span>
+      </div>
+    </div>
+    
+    <div class="action-buttons">
+      <button id="dashboard-btn">View Dashboard</button>
+      <button id="settings-btn">Settings</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

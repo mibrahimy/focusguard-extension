@@ -1,0 +1,539 @@
+// Timer script for active sessions
+let activeTimer = null;
+let sessionStartTime = null;
+let sessionDuration = null;
+let isPaused = false;
+let pausedTime = 0;
+
+function showFocusTimer(duration, startTime = Date.now()) {
+  // Remove existing timer
+  const existingTimer = document.querySelector('.focusguard-timer');
+  if (existingTimer) existingTimer.remove();
+  
+  if (activeTimer) {
+    clearInterval(activeTimer);
+  }
+  
+  const timer = document.createElement('div');
+  timer.className = 'focusguard-timer';
+  timer.innerHTML = `
+    <div class="timer-content">
+      <span class="timer-icon">⏱️</span>
+      <span class="timer-text">--:--</span>
+      <button class="timer-pause" title="Pause timer">⏸️</button>
+      <button class="timer-minimize" title="Minimize timer">−</button>
+    </div>
+  `;
+  
+  document.body.appendChild(timer);
+  
+  // Store session info for persistence
+  sessionStartTime = startTime;
+  sessionDuration = duration * 60 * 1000; // Convert to milliseconds
+  
+  // Add pause/resume functionality
+  const pauseBtn = timer.querySelector('.timer-pause');
+  pauseBtn.addEventListener('click', () => {
+    if (isPaused) {
+      // Resume timer
+      isPaused = false;
+      sessionStartTime = Date.now() - (sessionDuration - pausedTime);
+      pauseBtn.textContent = '⏸️';
+      pauseBtn.title = 'Pause timer';
+      timer.classList.remove('paused');
+    } else {
+      // Pause timer
+      isPaused = true;
+      pausedTime = sessionDuration - (Date.now() - sessionStartTime);
+      pauseBtn.textContent = '▶️';
+      pauseBtn.title = 'Resume timer';
+      timer.classList.add('paused');
+    }
+  });
+  
+  // Add minimize functionality
+  const minimizeBtn = timer.querySelector('.timer-minimize');
+  minimizeBtn.addEventListener('click', () => {
+    timer.classList.toggle('minimized');
+    minimizeBtn.textContent = timer.classList.contains('minimized') ? '+' : '−';
+  });
+  
+  // Update timer every second
+  const updateTimer = () => {
+    if (isPaused) {
+      // Display paused time
+      const totalSeconds = Math.floor(pausedTime / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      timer.querySelector('.timer-text').textContent = 
+        `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      return;
+    }
+    
+    const elapsed = Date.now() - sessionStartTime;
+    const remaining = Math.max(0, sessionDuration - elapsed);
+    
+    if (remaining <= 0) {
+      clearInterval(activeTimer);
+      timer.remove();
+      showTimeUpNotification();
+      return;
+    }
+    
+    const totalSeconds = Math.floor(remaining / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    
+    timer.querySelector('.timer-text').textContent = 
+      `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Add warning state when less than 1 minute
+    if (totalSeconds <= 60) {
+      timer.classList.add('warning');
+    }
+  };
+  
+  updateTimer(); // Initial update
+  activeTimer = setInterval(updateTimer, 1000);
+}
+
+function showTimeUpNotification() {
+  // Get current session info for reflection
+  chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
+    const notification = document.createElement('div');
+    notification.className = 'focusguard-notification enhanced';
+    notification.innerHTML = `
+      <div class="notification-content">
+        <div class="notification-header">
+          <span class="notification-icon">🎯</span>
+          <h3>Session Complete!</h3>
+        </div>
+        
+        <div class="session-summary">
+          <p class="intention-reminder">Your intention: <strong>"${session?.intention || 'Focus session'}"</strong></p>
+          <p class="reflection-prompt">How did this session go?</p>
+        </div>
+        
+        <div class="reflection-options">
+          <button class="reflection-btn accomplished" data-outcome="accomplished">
+            <span class="emoji">✅</span>
+            <span class="text">Goal accomplished</span>
+          </button>
+          <button class="reflection-btn partial" data-outcome="partial">
+            <span class="emoji">⚡</span>
+            <span class="text">Made progress</span>
+          </button>
+          <button class="reflection-btn distracted" data-outcome="distracted">
+            <span class="emoji">😅</span>
+            <span class="text">Got distracted</span>
+          </button>
+        </div>
+        
+        <div class="session-actions">
+          <button id="extend-btn" class="btn-secondary">
+            <span class="icon">⏱️</span>
+            Extend 5 min
+          </button>
+          <button id="end-session-btn" class="btn-primary">
+            <span class="icon">✨</span>
+            End session
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Add reflection tracking
+    notification.querySelectorAll('.reflection-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const outcome = btn.dataset.outcome;
+        
+        // Visual feedback
+        notification.querySelectorAll('.reflection-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        
+        // Track the reflection
+        chrome.runtime.sendMessage({
+          action: 'trackSessionReflection',
+          outcome,
+          session: session
+        }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('FocusGuard: Error tracking reflection:', chrome.runtime.lastError);
+          }
+        });
+        
+        // Show encouraging message
+        showEncouragementMessage(outcome, notification);
+      });
+    });
+    
+    document.getElementById('extend-btn').addEventListener('click', () => {
+      notification.remove();
+      showFocusTimer(5);
+    });
+    
+    document.getElementById('end-session-btn').addEventListener('click', () => {
+      notification.remove();
+    });
+    
+    // Auto-show with animation
+    setTimeout(() => {
+      notification.classList.add('show');
+    }, 100);
+  });
+}
+
+function showEncouragementMessage(outcome, notification) {
+  const messages = {
+    accomplished: "🎉 Excellent! You stayed focused and achieved your goal. Keep up the great work!",
+    partial: "👏 Good progress! Every step forward counts. Consider what helped you focus today.",
+    distracted: "💪 No worries! Distraction happens. The important thing is recognizing it and trying again."
+  };
+  
+  const encouragement = document.createElement('div');
+  encouragement.className = 'encouragement-message';
+  encouragement.innerHTML = `
+    <p>${messages[outcome]}</p>
+  `;
+  
+  const summary = notification.querySelector('.session-summary');
+  summary.appendChild(encouragement);
+  
+  // Remove after 4 seconds
+  setTimeout(() => {
+    if (encouragement.parentNode) {
+      encouragement.remove();
+    }
+  }, 4000);
+}
+
+function trackSearchQuery() {
+  const hostname = window.location.hostname;
+  const site = hostname.includes('youtube') ? 'YouTube' : 'WhatsApp';
+  
+  if (site === 'YouTube') {
+    // Track search box queries
+    const searchBox = document.querySelector('input#search');
+    if (searchBox && !searchBox.hasAttribute('data-focusguard-tracked')) {
+      searchBox.setAttribute('data-focusguard-tracked', 'true');
+      searchBox.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.value.trim()) {
+          chrome.runtime.sendMessage({
+            action: 'trackSearch',
+            site: 'YouTube',
+            searchQuery: e.target.value.trim()
+          }, () => {
+            if (chrome.runtime.lastError) {
+              console.error('FocusGuard: Error tracking search:', chrome.runtime.lastError);
+            }
+          });
+        }
+      });
+    }
+    
+    // Track video clicks
+    trackVideoClicks();
+    
+    // Track page navigation
+    trackPageNavigation();
+  } else if (site === 'WhatsApp') {
+    // Track WhatsApp activity
+    trackWhatsAppActivity();
+  }
+}
+
+let videoClickHandler = null;
+
+function trackVideoClicks() {
+  // Remove existing handler to prevent duplicates
+  if (videoClickHandler) {
+    document.removeEventListener('click', videoClickHandler);
+  }
+  
+  // Track clicks on video thumbnails and titles
+  const videoSelectors = [
+    'a#video-title', // Video titles
+    'a.ytd-thumbnail', // Thumbnails
+    '#dismissible', // Video containers
+    '.ytd-rich-item-renderer' // Homepage video items
+  ];
+  
+  videoClickHandler = (e) => {
+    for (const selector of videoSelectors) {
+      const target = e.target.closest(selector);
+      if (target && !target.hasAttribute('data-focusguard-tracked')) {
+        target.setAttribute('data-focusguard-tracked', 'true');
+        
+        // Extract video title if possible
+        const titleElement = target.querySelector('#video-title, .ytd-video-meta-block #video-title');
+        const videoTitle = titleElement?.textContent?.trim() || 'Video click';
+        
+        chrome.runtime.sendMessage({
+          action: 'trackActivity',
+          site: 'YouTube',
+          activityType: 'video_click',
+          activityData: videoTitle
+        }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('FocusGuard: Error tracking video click:', chrome.runtime.lastError);
+          }
+        });
+        break; // Only handle first match
+      }
+    }
+  };
+  
+  document.addEventListener('click', videoClickHandler);
+}
+
+let navigationCheckInterval = null;
+
+function trackPageNavigation() {
+  let lastUrl = window.location.href;
+  
+  // Clear existing interval to prevent duplicates
+  if (navigationCheckInterval) {
+    clearInterval(navigationCheckInterval);
+  }
+  
+  // Track URL changes (for SPA navigation)
+  const checkUrlChange = () => {
+    if (window.location.href !== lastUrl) {
+      lastUrl = window.location.href;
+      
+      let pageType = 'unknown';
+      if (lastUrl.includes('/watch')) {
+        pageType = 'video_watch';
+      } else if (lastUrl.includes('/results')) {
+        pageType = 'search_results';
+      } else if (lastUrl.includes('/channel')) {
+        pageType = 'channel';
+      } else if (lastUrl === 'https://www.youtube.com/' || lastUrl === 'https://youtube.com/') {
+        pageType = 'homepage';
+      }
+      
+      chrome.runtime.sendMessage({
+        action: 'trackActivity',
+        site: 'YouTube',
+        activityType: 'page_navigation',
+        activityData: pageType
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('FocusGuard: Error tracking navigation:', chrome.runtime.lastError);
+        }
+      });
+    }
+  };
+  
+  // Check for URL changes with reduced frequency and proper cleanup
+  navigationCheckInterval = setInterval(checkUrlChange, 2000); // Reduced from 1000ms
+}
+
+function trackWhatsAppActivity() {
+  // Track chat clicks
+  document.addEventListener('click', (e) => {
+    const chatItem = e.target.closest('[data-testid="cell-frame-container"]');
+    if (chatItem && !chatItem.hasAttribute('data-focusguard-tracked')) {
+      chatItem.setAttribute('data-focusguard-tracked', 'true');
+      
+      chrome.runtime.sendMessage({
+        action: 'trackActivity',
+        site: 'WhatsApp',
+        activityType: 'chat_open',
+        activityData: 'Chat opened'
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('FocusGuard: Error tracking WhatsApp activity:', chrome.runtime.lastError);
+        }
+      });
+    }
+  });
+  
+  // Track message sending
+  const messageBox = document.querySelector('[data-testid="conversation-compose-box-input"]');
+  if (messageBox && !messageBox.hasAttribute('data-focusguard-tracked')) {
+    messageBox.setAttribute('data-focusguard-tracked', 'true');
+    messageBox.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        chrome.runtime.sendMessage({
+          action: 'trackActivity',
+          site: 'WhatsApp',
+          activityType: 'message_sent',
+          activityData: 'Message sent'
+        }, () => {
+          if (chrome.runtime.lastError) {
+            console.error('FocusGuard: Error tracking message:', chrome.runtime.lastError);
+          }
+        });
+      }
+    });
+  }
+}
+
+// Check if we should show timer for existing session
+function checkAndRestoreTimer() {
+  chrome.runtime.sendMessage({ 
+    action: 'getActiveSession'
+  }, (session) => {
+    if (chrome.runtime.lastError) {
+      console.error('FocusGuard: Error getting session:', chrome.runtime.lastError);
+      return;
+    }
+    
+    if (session && session.duration > 0) {
+      const elapsed = Date.now() - session.startTime;
+      const remaining = Math.max(0, session.duration - elapsed);
+      if (remaining > 0) {
+        // Pass the original start time to maintain consistency
+        showFocusTimer(Math.ceil(session.duration / 60000), session.startTime);
+      }
+    }
+  });
+}
+
+// Check on page load
+checkAndRestoreTimer();
+
+// Also check when page becomes visible (tab switching)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    checkAndRestoreTimer();
+  }
+});
+
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'timeUp') {
+    showTimeUpNotification();
+  } else if (request.action === 'startTimer') {
+    showFocusTimer(request.duration);
+  }
+});
+
+// Track search queries
+document.addEventListener('DOMContentLoaded', trackSearchQuery);
+
+// Observer for dynamic content with throttling and cleanup
+let observer = null;
+let observerThrottle = null;
+
+function initializeObserver() {
+  if (observer) {
+    observer.disconnect();
+  }
+  
+  // Enhanced throttling with performance monitoring
+  let executionCount = 0;
+  const throttledTrackSearch = () => {
+    if (observerThrottle) return;
+    
+    executionCount++;
+    if (executionCount > 100) {
+      console.warn('FocusGuard: Observer execution count high, increasing throttle');
+      observerThrottle = setTimeout(() => {
+        trackSearchQuery();
+        observerThrottle = null;
+      }, 1000); // Increase throttle under high load
+      
+      // Reset counter periodically
+      setTimeout(() => { executionCount = Math.max(0, executionCount - 50); }, 30000);
+    } else {
+      observerThrottle = setTimeout(() => {
+        trackSearchQuery();
+        observerThrottle = null;
+      }, 500); // Normal throttle
+    }
+  };
+  
+  observer = new MutationObserver(throttledTrackSearch);
+
+  if (document.body) {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: false, // Reduced scope to prevent performance issues
+      attributes: false,
+      characterData: false
+    });
+  }
+}
+
+// Enhanced cleanup function with memory optimization
+function cleanup() {
+  console.time('FocusGuard: Cleanup duration');
+  
+  // Clear all intervals and timeouts
+  if (activeTimer) {
+    clearInterval(activeTimer);
+    activeTimer = null;
+  }
+  
+  if (navigationCheckInterval) {
+    clearInterval(navigationCheckInterval);
+    navigationCheckInterval = null;
+  }
+  
+  if (observerThrottle) {
+    clearTimeout(observerThrottle);
+    observerThrottle = null;
+  }
+  
+  // Disconnect observer and clear references
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+  
+  // Remove event listeners with proper cleanup
+  if (videoClickHandler) {
+    document.removeEventListener('click', videoClickHandler);
+    videoClickHandler = null;
+  }
+  
+  // Batch DOM removals for better performance
+  const elementsToRemove = [
+    '.focusguard-timer',
+    '.focusguard-notification',
+    '.focusguard-overlay'
+  ];
+  
+  elementsToRemove.forEach(selector => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach(element => {
+      // Remove event listeners before removing element
+      const clone = element.cloneNode(true);
+      element.parentNode?.replaceChild(clone, element);
+      clone.remove();
+    });
+  });
+  
+  // Clear session-related variables
+  sessionStartTime = null;
+  sessionDuration = null;
+  isPaused = false;
+  pausedTime = 0;
+  
+  console.timeEnd('FocusGuard: Cleanup duration');
+  console.log('FocusGuard: Enhanced cleanup completed with memory optimization');
+}
+
+// Initialize observer
+initializeObserver();
+
+// Clean up when page unloads
+window.addEventListener('beforeunload', cleanup);
+window.addEventListener('pagehide', cleanup);
+
+// Reinitialize when page becomes visible
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    checkAndRestoreTimer();
+    initializeObserver();
+  } else {
+    // Pause observers when tab is hidden to save resources
+    if (observer) {
+      observer.disconnect();
+    }
+  }
+});

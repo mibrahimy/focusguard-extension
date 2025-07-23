@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusGuard Extension Test</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .test-button {
+            background: #4F46E5;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #4338CA;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <h1>FocusGuard Extension Test Page</h1>
+    
+    <div class="test-section">
+        <h2>1. Extension Installation Check</h2>
+        <p>First, make sure the extension is properly installed:</p>
+        <ul>
+            <li>Go to <code>brave://extensions/</code></li>
+            <li>Enable "Developer mode" (top right toggle)</li>
+            <li>Click "Load unpacked" and select the focusguard-extension folder</li>
+            <li>The FocusGuard extension should appear with no errors</li>
+        </ul>
+        <div id="extension-status" class="status">Checking extension...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Quick Tests</h2>
+        <p>Try these tests to see what's working:</p>
+        
+        <button class="test-button" onclick="testExtensionPopup()">
+            Test Extension Popup
+        </button>
+        
+        <button class="test-button" onclick="testYouTubeNavigation()">
+            Navigate to YouTube
+        </button>
+        
+        <button class="test-button" onclick="testWhatsAppNavigation()">
+            Navigate to WhatsApp
+        </button>
+        
+        <button class="test-button" onclick="checkStorage()">
+            Check Extension Storage
+        </button>
+        
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Console Debugging</h2>
+        <p>Open DevTools (F12) and check the Console tab for FocusGuard messages when you visit YouTube or WhatsApp.</p>
+        <p>You should see messages like:</p>
+        <ul>
+            <li><code>FocusGuard: Intention detector loaded on youtube.com</code></li>
+            <li><code>FocusGuard: Checking intention for YouTube</code></li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Expected Behavior</h2>
+        <p>When working correctly:</p>
+        <ol>
+            <li>Visit YouTube → You should see a red "FocusGuard Script Loaded" indicator for 3 seconds</li>
+            <li>A blue "Test FocusGuard" button should appear for 10 seconds</li>
+            <li>The intention prompt should appear automatically or when clicking the test button</li>
+            <li>After setting intention, a timer should appear in the top-right corner</li>
+        </ol>
+    </div>
+
+    <script>
+        function addResult(message, isError = false) {
+            const results = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = isError ? 'status error' : 'status success';
+            div.textContent = message;
+            results.appendChild(div);
+        }
+
+        function testExtensionPopup() {
+            addResult('Extension popup test - check if FocusGuard icon appears in toolbar');
+        }
+
+        function testYouTubeNavigation() {
+            window.open('https://youtube.com', '_blank');
+            addResult('Opened YouTube - check for FocusGuard indicators');
+        }
+
+        function testWhatsAppNavigation() {
+            window.open('https://web.whatsapp.com', '_blank');
+            addResult('Opened WhatsApp - check for FocusGuard indicators');
+        }
+
+        async function checkStorage() {
+            try {
+                if (typeof chrome !== 'undefined' && chrome.storage) {
+                    const result = await chrome.storage.local.get();
+                    addResult('Storage contents: ' + JSON.stringify(result));
+                } else {
+                    addResult('Chrome storage API not available on this page', true);
+                }
+            } catch (error) {
+                addResult('Storage check failed: ' + error.message, true);
+            }
+        }
+
+        // Check if extension is loaded
+        setTimeout(() => {
+            const statusDiv = document.getElementById('extension-status');
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✓ Chrome extension API available';
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '✗ Chrome extension API not detected';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

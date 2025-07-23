@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "FocusGuard",
+  "version": "1.0.0",
+  "description": "Stay focused on YouTube and WhatsApp by setting intentions before browsing",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://youtube.com/*",
+    "*://m.youtube.com/*",
+    "*://music.youtube.com/*",
+    "*://*.whatsapp.com/*",
+    "*://web.whatsapp.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.whatsapp.com/*",
+        "*://web.whatsapp.com/*"
+      ],
+      "js": ["content/focusguard-content.js"],
+      "css": ["assets/css/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/css/content.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "options_page": "dashboard/dashboard.html"
+}
