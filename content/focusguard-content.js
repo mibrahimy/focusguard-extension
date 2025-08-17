@@ -4,6 +4,15 @@
 
 console.log('FocusGuard: Content script loaded');
 
+// IMMEDIATELY clear any residual blur on script load
+(function() {
+  if (document.documentElement) {
+    document.documentElement.style.filter = '';
+    document.documentElement.style.transition = '';
+    document.documentElement.style.overflow = '';
+  }
+})();
+
 const MONITORED_SITES = {
   'youtube.com': 'YouTube',
   'whatsapp.com': 'WhatsApp',
@@ -49,7 +58,7 @@ function sanitizeInput(input, maxLength = 500) {
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
-// Show intention overlay
+// Show intention overlay with enhanced UX
 function showIntentionOverlay(siteName) {
   // Remove any existing overlay
   removeIntentionOverlay();
@@ -60,9 +69,10 @@ function showIntentionOverlay(siteName) {
     return;
   }
   
-  // Hide page content
+  // Prepare for overlay (blur will be applied when overlay is shown)
   if (document.documentElement) {
     document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.transition = 'filter 0.3s ease';
   }
   
   const sanitizedSiteName = sanitizeInput(siteName, 50);
@@ -75,7 +85,11 @@ function showIntentionOverlay(siteName) {
       <div class="modal-header">
         <div class="site-icon" aria-hidden="true">${siteName === 'YouTube' ? '🎥' : '💬'}</div>
         <h2 id="focus-title">Take a mindful moment...</h2>
-        <p id="focus-subtitle" class="subtitle">What's your true purpose for visiting ${sanitizedSiteName} right now?</p>
+        <p id="focus-subtitle" class="subtitle">You're about to visit ${sanitizedSiteName}. Let's set a clear intention first.</p>
+        <div class="context-hint">
+          <span class="hint-icon">💭</span>
+          <span class="hint-text">This helps you stay focused and avoid mindless browsing</span>
+        </div>
         <div class="mindfulness-tip">
           <span class="tip-icon">💡</span>
           <span class="tip-text">Being intentional helps you stay focused and avoid mindless browsing</span>
@@ -102,10 +116,14 @@ function showIntentionOverlay(siteName) {
             rows="3"
             aria-label="Your specific intention for this session"
             aria-describedby="input-validation"
+            maxlength="200"
             required
           ></textarea>
           <label class="floating-label" for="intention-input">My specific goal is...</label>
           <div class="input-validation" id="input-validation" aria-live="polite"></div>
+          <div class="input-counter">
+            <span class="counter-text" id="char-counter">0/200</span>
+          </div>
           <div class="helpful-hints">
             <span class="hint-icon">✨</span>
             <span class="hint-text">Be specific - it helps your brain stay on track!</span>
@@ -123,6 +141,7 @@ function showIntentionOverlay(siteName) {
           <div class="custom-duration">
             <input type="number" id="duration-input" min="1" max="120" value="15" class="duration-input">
             <span class="duration-label">minutes</span>
+            <div class="duration-preview" id="duration-preview">Until 3:45 PM</div>
           </div>
         </div>
       </div>
@@ -143,15 +162,27 @@ function showIntentionOverlay(siteName) {
   // Setup event listeners
   setupOverlayEventListeners(overlay, siteName);
   
-  // Load suggestions
-  setTimeout(() => loadIntentionSuggestions(siteName), 100);
+  // Load suggestions with staggered animation
+  setTimeout(() => loadIntentionSuggestions(siteName), 300);
   
-  // Show with animation
+  // Show with animation and apply blur
   setTimeout(() => {
     overlay.classList.add('active');
+    // Apply blur only when overlay is successfully shown
+    if (document.documentElement) {
+      document.documentElement.style.filter = 'blur(2px)';
+    }
     const input = document.getElementById('intention-input');
     if (input) input.focus();
   }, 100);
+  
+  // Failsafe: Clear blur after 10 seconds if overlay is still present but something went wrong
+  setTimeout(() => {
+    if (currentOverlay && document.documentElement && document.documentElement.style.filter.includes('blur')) {
+      console.warn('FocusGuard: Failsafe clearing stuck blur');
+      clearPageBlur();
+    }
+  }, 10000);
 }
 
 // Setup event listeners for overlay
@@ -197,25 +228,70 @@ function setupOverlayEventListeners(overlay, siteName) {
     });
   });
   
-  // Duration input
+  // Enhanced duration input with time preview
   const durationInput = document.getElementById('duration-input');
+  const durationPreview = document.getElementById('duration-preview');
+  
   if (durationInput) {
+    const updateDurationPreview = () => {
+      const minutes = parseInt(durationInput.value) || 15;
+      const endTime = new Date(Date.now() + minutes * 60000);
+      const timeString = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (durationPreview) {
+        durationPreview.textContent = `Until ${timeString}`;
+      }
+    };
+    
     durationInput.addEventListener('input', () => {
       overlay.querySelectorAll('.duration-chip').forEach(c => c.classList.remove('active'));
+      updateDurationPreview();
     });
+    
+    // Initialize preview
+    updateDurationPreview();
   }
   
-  // Intention input validation
+  // Enhanced intention input with debounced validation
   const intentionInput = document.getElementById('intention-input');
   const validationDiv = document.getElementById('input-validation');
+  const charCounter = document.getElementById('char-counter');
   
   if (intentionInput && validationDiv) {
+    // Real-time character counter
     intentionInput.addEventListener('input', () => {
-      try {
-        validateIntention(intentionInput.value, validationDiv);
-      } catch (error) {
-        console.error('FocusGuard: Error validating intention:', error);
+      const length = intentionInput.value.length;
+      charCounter.textContent = `${length}/200`;
+      
+      // Color coding for character count
+      if (length > 180) {
+        charCounter.style.color = 'var(--md-sys-color-error)';
+      } else if (length > 150) {
+        charCounter.style.color = 'var(--mindful-orange)';
+      } else {
+        charCounter.style.color = 'var(--md-sys-color-on-surface-variant)';
       }
+    });
+    
+    // Debounced validation
+    let validationTimeout;
+    intentionInput.addEventListener('input', () => {
+      clearTimeout(validationTimeout);
+      validationTimeout = setTimeout(() => {
+        try {
+          validateIntention(intentionInput.value, validationDiv);
+        } catch (error) {
+          console.error('FocusGuard: Error validating intention:', error);
+        }
+      }, 300);
+    });
+    
+    // Enhanced focus states
+    intentionInput.addEventListener('focus', () => {
+      intentionInput.parentElement.classList.add('focused');
+    });
+    
+    intentionInput.addEventListener('blur', () => {
+      intentionInput.parentElement.classList.remove('focused');
     });
   }
   
@@ -321,14 +397,18 @@ function handleSkip() {
 // Remove intention overlay
 function removeIntentionOverlay() {
   if (currentOverlay) {
+    // Clear blur immediately, not after animation
+    if (document.documentElement) {
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.filter = '';
+      document.documentElement.style.transition = '';
+    }
+    
     currentOverlay.classList.remove('active');
     setTimeout(() => {
       if (currentOverlay && currentOverlay.parentNode) {
         currentOverlay.remove();
         currentOverlay = null;
-        if (document.documentElement) {
-          document.documentElement.style.overflow = '';
-        }
       }
     }, 300);
   }
@@ -370,11 +450,17 @@ function showFocusTimer(duration, intention = null) {
         <div class="timer-header">
           <span class="timer-icon">⏱️</span>
           <span class="timer-text">${duration}:00</span>
-          <button class="timer-minimize" title="Minimize timer">−</button>
+          <div class="timer-controls">
+            <button class="timer-pause" title="Pause timer" aria-label="Pause timer">⏸️</button>
+            <button class="timer-minimize" title="Minimize timer" aria-label="Minimize timer">−</button>
+          </div>
         </div>
         <div class="timer-intention" title="${sanitizedIntention}">
           <span class="intention-icon">🎯</span>
           <span class="intention-text">${displayIntention}</span>
+        </div>
+        <div class="timer-progress">
+          <div class="progress-fill"></div>
         </div>
       </div>
     `;
@@ -382,57 +468,92 @@ function showFocusTimer(duration, intention = null) {
     document.body.appendChild(timer);
     currentTimer = timer;
     
-    // Setup timer functionality
-    setupTimerFunctionality(timer, duration);
+    // Setup enhanced timer functionality
+    setupTimerFunctionality(timer, duration, sanitizedIntention);
+    
+    // Add click-to-expand functionality
+    timer.addEventListener('click', (e) => {
+      if (!e.target.matches('button')) {
+        timer.classList.toggle('minimized');
+        const minimizeBtn = timer.querySelector('.timer-minimize');
+        if (minimizeBtn) {
+          minimizeBtn.textContent = timer.classList.contains('minimized') ? '+' : '−';
+          minimizeBtn.title = timer.classList.contains('minimized') ? 'Expand timer' : 'Minimize timer';
+        }
+      }
+    });
+    
+    // Add hover effects for better feedback
+    timer.addEventListener('mouseenter', () => {
+      if (!timer.classList.contains('minimized')) {
+        timer.style.transform = 'scale(1.02)';
+      }
+    });
+    
+    timer.addEventListener('mouseleave', () => {
+      timer.style.transform = 'scale(1)';
+    });
     
   } catch (error) {
     console.error('FocusGuard: Error showing timer:', error);
   }
 }
 
-// Setup timer functionality with mindfulness features
-function setupTimerFunctionality(timer, duration) {
+// Setup enhanced timer functionality with mindfulness features
+function setupTimerFunctionality(timer, duration, intention) {
   let timeLeft = duration * 60;
   const totalDuration = duration * 60;
   let reminderShown = false;
+  let isPaused = false;
+  let pausedTime = 0;
   
   const timerInterval = setInterval(() => {
     try {
-      timeLeft--;
-      const minutes = Math.floor(timeLeft / 60);
-      const seconds = timeLeft % 60;
-      
-      const timerText = timer.querySelector('.timer-text');
-      if (timerText) {
-        timerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      }
-      
-      // Update progress indicator
-      updateTimerProgress(timer, timeLeft, totalDuration);
-      
-      // Show mindful reminder at halfway point
-      if (!reminderShown && timeLeft <= totalDuration / 2 && timeLeft > totalDuration / 2 - 5) {
-        showMindfulReminder(timer);
-        reminderShown = true;
-      }
-      
-      // Add warning state when less than 2 minutes
-      if (timeLeft <= 120) {
-        timer.classList.add('warning');
+      if (!isPaused) {
+        timeLeft--;
         
-        // Gentle pulsing for last 30 seconds
-        if (timeLeft <= 30) {
-          timer.classList.add('final-countdown');
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        
+        const timerText = timer.querySelector('.timer-text');
+        if (timerText) {
+          timerText.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+          
+          // Add breathing animation for last 2 minutes
+          if (timeLeft <= 120 && timeLeft > 30) {
+            timerText.style.animation = 'breathe 4s ease-in-out infinite';
+          } else if (timeLeft <= 30) {
+            timerText.style.animation = 'finalPulse 1s ease-in-out infinite';
+          }
         }
-      }
-      
-      if (timeLeft <= 0) {
-        clearInterval(timerInterval);
-        timer.remove();
-        if (currentTimer === timer) {
-          currentTimer = null;
+        
+        // Update progress indicator with smooth animation
+        updateTimerProgress(timer, timeLeft, totalDuration);
+        
+        // Show mindful reminder at halfway point
+        if (!reminderShown && timeLeft <= totalDuration / 2 && timeLeft > totalDuration / 2 - 5) {
+          showMindfulReminder(timer, intention);
+          reminderShown = true;
         }
-        showTimeUpNotification();
+        
+        // Add warning state when less than 2 minutes
+        if (timeLeft <= 120) {
+          timer.classList.add('warning');
+          
+          // Gentle pulsing for last 30 seconds
+          if (timeLeft <= 30) {
+            timer.classList.add('final-countdown');
+          }
+        }
+        
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          timer.remove();
+          if (currentTimer === timer) {
+            currentTimer = null;
+          }
+          showTimeUpNotification();
+        }
       }
     } catch (error) {
       console.error('FocusGuard: Error updating timer:', error);
@@ -440,45 +561,92 @@ function setupTimerFunctionality(timer, duration) {
     }
   }, 1000);
   
-  // Minimize button
+  // Enhanced control buttons
   const minimizeBtn = timer.querySelector('.timer-minimize');
+  const pauseBtn = timer.querySelector('.timer-pause');
+  
   if (minimizeBtn) {
-    minimizeBtn.addEventListener('click', () => {
+    minimizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       timer.classList.toggle('minimized');
       minimizeBtn.textContent = timer.classList.contains('minimized') ? '+' : '−';
       minimizeBtn.title = timer.classList.contains('minimized') ? 'Expand timer' : 'Minimize timer';
     });
   }
+  
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      isPaused = !isPaused;
+      
+      if (isPaused) {
+        pauseBtn.textContent = '▶️';
+        pauseBtn.title = 'Resume timer';
+        timer.classList.add('paused');
+        pausedTime = Date.now();
+      } else {
+        pauseBtn.textContent = '⏸️';
+        pauseBtn.title = 'Pause timer';
+        timer.classList.remove('paused');
+        
+        // Show brief resume feedback
+        showBriefFeedback(timer, 'Timer resumed');
+      }
+    });
+  }
 }
 
-// Update timer progress indicator
+// Update timer progress indicator with smooth transitions
 function updateTimerProgress(timer, timeLeft, totalDuration) {
   const progress = ((totalDuration - timeLeft) / totalDuration) * 100;
   
-  // Add or update progress bar
-  let progressBar = timer.querySelector('.timer-progress');
-  if (!progressBar) {
-    progressBar = document.createElement('div');
-    progressBar.className = 'timer-progress';
-    progressBar.innerHTML = '<div class="progress-fill"></div>';
-    timer.appendChild(progressBar);
-  }
-  
-  const progressFill = progressBar.querySelector('.progress-fill');
+  const progressFill = timer.querySelector('.progress-fill');
   if (progressFill) {
-    progressFill.style.width = `${progress}%`;
+    // Smooth transition with requestAnimationFrame
+    requestAnimationFrame(() => {
+      progressFill.style.width = `${progress}%`;
+      
+      // Color changes based on progress
+      if (progress > 75) {
+        progressFill.style.background = 'var(--mindful-green)';
+      } else if (progress > 50) {
+        progressFill.style.background = 'var(--mindful-orange)';
+      } else {
+        progressFill.style.background = 'var(--md-sys-color-primary)';
+      }
+    });
   }
 }
 
-// Show mindful reminder at halfway point
-function showMindfulReminder(timer) {
+// Helper function for brief feedback messages
+function showBriefFeedback(timer, message) {
+  const feedback = document.createElement('div');
+  feedback.className = 'brief-feedback';
+  feedback.textContent = message;
+  
+  timer.appendChild(feedback);
+  
+  setTimeout(() => {
+    feedback.style.opacity = '0';
+    setTimeout(() => {
+      if (feedback.parentNode) {
+        feedback.remove();
+      }
+    }, 300);
+  }, 1500);
+}
+
+// Show enhanced mindful reminder with personalization
+function showMindfulReminder(timer, intention) {
   try {
     const reminder = document.createElement('div');
     reminder.className = 'mindful-reminder';
+    const shortIntention = intention ? intention.substring(0, 30) + (intention.length > 30 ? '...' : '') : 'your goal';
+    
     reminder.innerHTML = `
       <div class="reminder-content">
         <span class="reminder-icon">🧘‍♀️</span>
-        <span class="reminder-text">Halfway there! Still focused on your goal?</span>
+        <span class="reminder-text">Halfway there! Still working on ${shortIntention}?</span>
       </div>
     `;
     
@@ -832,12 +1000,26 @@ function addRippleEffect(button) {
   });
 }
 
+// Ensure page is never stuck with blur
+function clearPageBlur() {
+  if (document.documentElement) {
+    document.documentElement.style.filter = '';
+    document.documentElement.style.transition = '';
+    document.documentElement.style.overflow = '';
+  }
+}
+
 // Initialize content script
 function initializeContentScript() {
   if (isInitialized) return;
   
+  // Always clear blur first, regardless of site
+  clearPageBlur();
+  
   const siteName = getCurrentSite();
-  if (!siteName) return;
+  if (!siteName) {
+    return;
+  }
   
   console.log('FocusGuard: Initializing content script for', siteName);
   
@@ -848,6 +1030,7 @@ function initializeContentScript() {
   }, (response) => {
     if (chrome.runtime.lastError) {
       console.error('FocusGuard: Error checking intention needed:', chrome.runtime.lastError);
+      clearPageBlur(); // Clear blur if there's an error
       return;
     }
     
@@ -910,6 +1093,9 @@ document.addEventListener('visibilitychange', () => {
           }
         }
       });
+    } else {
+      // Clear any residual blur if not on a monitored site
+      clearPageBlur();
     }
   }
 });

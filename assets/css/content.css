@@ -23,6 +23,31 @@
   --md-elevation-3: 0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px 0px rgba(0, 0, 0, 0.3);
   --md-elevation-4: 0px 6px 10px 4px rgba(0, 0, 0, 0.15), 0px 2px 3px 0px rgba(0, 0, 0, 0.3);
   --md-elevation-5: 0px 8px 12px 6px rgba(0, 0, 0, 0.15), 0px 4px 4px 0px rgba(0, 0, 0, 0.3);
+  
+  /* Enhanced spacing system */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-xxl: 48px;
+  
+  /* Unified animation timing */
+  --transition-quick: 0.15s ease-out;
+  --transition-normal: 0.3s ease-out;
+  --transition-slow: 0.5s ease-out;
+  
+  /* Consistent border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-xxl: 28px;
+  
+  /* Mindfulness colors */
+  --mindful-green: #4CAF50;
+  --mindful-orange: #FF9800;
+  --mindful-blue: #2196F3;
 }
 
 .focusguard-overlay {
@@ -37,11 +62,13 @@
   z-index: 999999;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  backdrop-filter: blur(0px);
+  transition: opacity var(--transition-normal), backdrop-filter var(--transition-normal);
 }
 
 .focusguard-overlay.active {
   opacity: 1;
+  backdrop-filter: blur(8px);
 }
 
 .focusguard-backdrop {
@@ -51,24 +78,29 @@
   width: 100%;
   height: 100%;
   background: var(--md-sys-color-scrim);
-  opacity: 0.32;
+  opacity: 0.4;
+  transition: opacity var(--transition-normal);
 }
 
 .focusguard-modal {
   position: relative;
   background: var(--md-sys-color-surface);
-  border-radius: 28px;
+  border-radius: var(--radius-xxl);
   max-width: 560px;
   width: calc(100% - 48px);
   max-height: calc(100vh - 48px);
   overflow: hidden;
-  box-shadow: var(--md-elevation-3);
-  transform: scale(0.8) translateY(40px);
-  transition: transform 0.3s cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  box-shadow: var(--md-elevation-4);
+  transform: scale(0.9) translateY(20px);
+  transition: transform var(--transition-slow), box-shadow var(--transition-normal);
 }
 
 .focusguard-overlay.active .focusguard-modal {
   transform: scale(1) translateY(0);
+}
+
+.focusguard-modal:hover {
+  box-shadow: var(--md-elevation-5);
 }
 
 .modal-header {
@@ -101,14 +133,26 @@
 .mindfulness-tip {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 12px 16px;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   opacity: 0.9;
+  animation: slideInUp 0.4s ease-out 0.2s both;
+}
+
+.context-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.8;
+  animation: fadeIn 0.3s ease-out 0.4s both;
 }
 
 .tip-icon {
@@ -196,7 +240,23 @@
 
 .input-field {
   position: relative;
-  margin-bottom: 32px;
+  margin-bottom: var(--space-xl);
+  transition: transform var(--transition-quick);
+}
+
+.input-field.focused {
+  transform: scale(1.01);
+}
+
+.input-counter {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 11px;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.7;
+  transition: color var(--transition-quick);
+  pointer-events: none;
 }
 
 .input-validation {
@@ -230,28 +290,30 @@
 
 #intention-input {
   width: 100%;
-  min-height: 56px;
-  padding: 16px;
-  border: 1px solid var(--md-sys-color-outline);
-  border-radius: 4px;
+  min-height: 64px;
+  padding: var(--space-lg) var(--space-lg) var(--space-lg) var(--space-md);
+  border: 2px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-md);
   font-size: 16px;
   font-family: inherit;
-  line-height: 24px;
+  line-height: 1.5;
   color: var(--md-sys-color-on-surface);
   background: var(--md-sys-color-surface);
   resize: vertical;
   box-sizing: border-box;
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  transition: all var(--transition-normal);
 }
 
 #intention-input:focus {
   outline: none;
   border-color: var(--md-sys-color-primary);
-  box-shadow: 0 0 0 1px var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(103, 80, 164, 0.2);
+  transform: translateY(-1px);
 }
 
 #intention-input.error {
   border-color: var(--md-sys-color-error);
+  box-shadow: 0 0 0 3px rgba(186, 26, 26, 0.2);
   animation: shake 0.5s ease-in-out;
 }
 
@@ -318,11 +380,23 @@
 .custom-duration {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--md-sys-color-surface-variant);
+  position: relative;
+}
+
+.duration-preview {
+  position: absolute;
+  top: -24px;
+  right: 0;
+  font-size: 11px;
+  color: var(--md-sys-color-primary);
+  opacity: 0.8;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-out;
 }
 
 .duration-input {
@@ -353,7 +427,7 @@
 }
 
 .btn-text {
-  padding: 10px 24px;
+  padding: 12px 24px;
   border: none;
   border-radius: 20px;
   background: transparent;
@@ -364,17 +438,24 @@
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: background-color 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transition: all var(--transition-normal);
+  min-height: 48px;
 }
 
 .btn-text:hover {
   background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  transform: scale(1.02);
+}
+
+.btn-text:active {
+  transform: scale(0.98);
+  transition: all var(--transition-quick);
 }
 
 .btn-primary {
-  padding: 10px 24px;
+  padding: 12px 28px;
   border: none;
-  border-radius: 20px;
+  border-radius: 24px;
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   font-size: 14px;
@@ -383,20 +464,24 @@
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
-  box-shadow: var(--md-elevation-1);
+  transition: all var(--transition-normal);
+  box-shadow: var(--md-elevation-2);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-sm);
+  min-height: 48px;
 }
 
 .btn-primary:hover {
-  box-shadow: var(--md-elevation-2);
+  box-shadow: var(--md-elevation-3);
   background: color-mix(in srgb, var(--md-sys-color-on-primary) 8%, var(--md-sys-color-primary));
+  transform: translateY(-1px);
 }
 
 .btn-primary:active {
   box-shadow: var(--md-elevation-1);
+  transform: translateY(0) scale(0.98);
+  transition: all var(--transition-quick);
 }
 
 .btn-primary.loading {
