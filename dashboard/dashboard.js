@@ -15,11 +15,34 @@ async function loadDashboardData() {
       'halfwayReminders',
       'reflectionPrompts',
       'youtubeDefault',
-      'whatsappDefault'
+      'whatsappDefault',
+      'activeSessions'
     ]);
     
+    // Initialize with empty arrays if not present
     allSessions = data.sessions || [];
     sessionReflections = data.sessionReflections || [];
+    
+    // Merge active sessions if they exist
+    const activeSessions = data.activeSessions || {};
+    Object.values(activeSessions).forEach(activeSession => {
+      if (activeSession && activeSession.intention) {
+        // Add active sessions as current sessions
+        const existingSession = allSessions.find(s => 
+          s.timestamp === activeSession.startTime && 
+          s.intention === activeSession.intention
+        );
+        if (!existingSession) {
+          allSessions.push({
+            timestamp: activeSession.startTime,
+            site: activeSession.site,
+            intention: activeSession.intention,
+            duration: activeSession.duration,
+            isActive: true
+          });
+        }
+      }
+    });
     
     const timeSpent = data.totalTimeSpent || {};
     
@@ -543,7 +566,7 @@ function showErrorState() {
       <div style="text-align: center; padding: 48px; color: #666;">
         <h2>Unable to load dashboard</h2>
         <p>Please refresh the page or check the browser console for errors.</p>
-        <button onclick="location.reload()" style="
+        <button id="reload-btn" style="
           padding: 12px 24px; 
           background: #6750A4; 
           color: white; 
@@ -555,11 +578,60 @@ function showErrorState() {
         </button>
       </div>
     `;
+    
+    // Add event listener after innerHTML is set
+    document.getElementById('reload-btn')?.addEventListener('click', () => {
+      location.reload();
+    });
   }
+}
+
+// Theme management
+function initializeTheme() {
+  chrome.storage.local.get(['themePreference'], (data) => {
+    const preference = data.themePreference || 'system';
+    applyTheme(preference);
+    updateThemeToggle(preference);
+  });
+}
+
+function applyTheme(preference) {
+  const root = document.documentElement;
+  
+  if (preference === 'system') {
+    root.removeAttribute('data-theme');
+  } else {
+    root.setAttribute('data-theme', preference);
+  }
+}
+
+function updateThemeToggle(activeTheme) {
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.theme === activeTheme) {
+      btn.classList.add('active');
+    }
+  });
+}
+
+function setTheme(theme) {
+  chrome.storage.local.set({ themePreference: theme });
+  applyTheme(theme);
+  updateThemeToggle(theme);
 }
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize theme
+  initializeTheme();
+  
+  // Theme toggle
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setTheme(btn.dataset.theme);
+    });
+  });
+  
   // Date filter
   const dateFilterEl = document.getElementById('date-filter');
   if (dateFilterEl) {
@@ -596,8 +668,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('youtube-default')?.addEventListener('change', saveSettings);
   document.getElementById('whatsapp-default')?.addEventListener('change', saveSettings);
   
-  // Export data button
-  document.getElementById('export-data')?.addEventListener('click', exportData);
+  // Export data buttons
+  document.getElementById('export-json')?.addEventListener('click', exportData);
+  document.getElementById('export-csv')?.addEventListener('click', exportCSV);
   
   // Reset data button
   document.getElementById('reset-data')?.addEventListener('click', resetData);
@@ -638,10 +711,74 @@ async function exportData() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    console.log('FocusGuard Dashboard: Data exported');
+    console.log('FocusGuard Dashboard: JSON data exported');
   } catch (error) {
     console.error('FocusGuard Dashboard: Export failed:', error);
     alert('Export failed. Please try again.');
+  }
+}
+
+async function exportCSV() {
+  try {
+    const data = await chrome.storage.local.get(['sessions', 'sessionReflections', 'totalTimeSpent']);
+    const sessions = data.sessions || [];
+    const reflections = data.sessionReflections || [];
+    const timeSpent = data.totalTimeSpent || {};
+    
+    // Create CSV content
+    const csvHeaders = [
+      'Date',
+      'Time',
+      'Site',
+      'Intention',
+      'Duration (minutes)',
+      'Outcome',
+      'Actual Search',
+      'Timestamp'
+    ];
+    
+    const csvRows = sessions.map(session => {
+      const date = new Date(session.timestamp);
+      const reflection = reflections.find(r => 
+        Math.abs(r.timestamp - session.timestamp) < 60000
+      );
+      
+      return [
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        session.site || '',
+        `"${(session.intention || '').replace(/"/g, '""')}"`, // Escape quotes
+        session.duration ? Math.round(session.duration / 60000) : '',
+        reflection ? reflection.outcome : '',
+        `"${(session.actualSearch || '').replace(/"/g, '""')}"`, // Escape quotes
+        session.timestamp
+      ].join(',');
+    });
+    
+    // Add summary statistics at the bottom
+    csvRows.push('');
+    csvRows.push('=== SUMMARY STATISTICS ===');
+    csvRows.push(`Total YouTube Time,${Math.round((timeSpent.YouTube || 0) / 60000)} minutes`);
+    csvRows.push(`Total WhatsApp Time,${Math.round((timeSpent.WhatsApp || 0) / 60000)} minutes`);
+    csvRows.push(`Total Sessions,${sessions.length}`);
+    csvRows.push(`Export Date,${new Date().toISOString()}`);
+    
+    const csvContent = [csvHeaders.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `focusguard-sessions-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('FocusGuard Dashboard: CSV data exported');
+  } catch (error) {
+    console.error('FocusGuard Dashboard: CSV export failed:', error);
+    alert('CSV export failed. Please try again.');
   }
 }
 

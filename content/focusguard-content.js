@@ -6,10 +6,19 @@ console.log('FocusGuard: Content script loaded');
 
 // IMMEDIATELY clear any residual blur on script load
 (function() {
-  if (document.documentElement) {
-    document.documentElement.style.filter = '';
-    document.documentElement.style.transition = '';
-    document.documentElement.style.overflow = '';
+  try {
+    if (document.documentElement) {
+      document.documentElement.style.removeProperty('filter');
+      document.documentElement.style.removeProperty('transition');
+      document.documentElement.style.removeProperty('overflow');
+    }
+    // Also clear body styles just in case
+    if (document.body) {
+      document.body.style.removeProperty('filter');
+      document.body.style.removeProperty('overflow');
+    }
+  } catch (e) {
+    console.warn('FocusGuard: Could not clear initial styles:', e);
   }
 })();
 
@@ -69,10 +78,9 @@ function showIntentionOverlay(siteName) {
     return;
   }
   
-  // Prepare for overlay (blur will be applied when overlay is shown)
-  if (document.documentElement) {
-    document.documentElement.style.overflow = 'hidden';
-    document.documentElement.style.transition = 'filter 0.3s ease';
+  // Prepare for overlay - we'll blur the body content, not the whole document
+  if (document.body) {
+    document.body.style.overflow = 'hidden';
   }
   
   const sanitizedSiteName = sanitizeInput(siteName, 50);
@@ -97,6 +105,11 @@ function showIntentionOverlay(siteName) {
       </div>
       
       <div class="modal-content">
+        <div class="templates-container" id="templates-container" style="display: none;">
+          <label class="field-label">Recent templates:</label>
+          <div class="template-chips" id="template-chips"></div>
+        </div>
+        
         <div class="suggestions-container" id="suggestions-container" style="display: none;">
           <label class="field-label">Quick suggestions:</label>
           <div class="suggestion-chips" id="suggestion-chips"></div>
@@ -147,11 +160,20 @@ function showIntentionOverlay(siteName) {
       </div>
       
       <div class="modal-actions">
-        <button id="skip-btn" class="btn-text">Skip for now</button>
+        <button id="skip-btn" class="btn-text">
+          Skip for now
+          <span class="keyboard-hint">Esc</span>
+        </button>
         <button id="set-intention-btn" class="btn-primary">
           <span class="btn-text">Begin focused session</span>
+          <span class="keyboard-hint">Ctrl+Enter</span>
           <div class="btn-ripple"></div>
         </button>
+      </div>
+      
+      <div class="shortcuts-help">
+        <span class="shortcuts-icon">⌨️</span>
+        <span class="shortcuts-text">Ctrl+1-4: Quick duration | Ctrl+S: Skip</span>
       </div>
     </div>
   `;
@@ -162,26 +184,54 @@ function showIntentionOverlay(siteName) {
   // Setup event listeners
   setupOverlayEventListeners(overlay, siteName);
   
-  // Load suggestions with staggered animation
-  setTimeout(() => loadIntentionSuggestions(siteName), 300);
+  // Load templates and suggestions with staggered animation
+  setTimeout(() => {
+    loadIntentionTemplates(siteName);
+    loadIntentionSuggestions(siteName);
+  }, 300);
   
-  // Show with animation and apply blur
+  // Create a blur container for all body content except our overlay
+  const blurContainer = document.createElement('div');
+  blurContainer.className = 'focusguard-blur-container';
+  blurContainer.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 999998;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    background: rgba(0, 0, 0, 0.1);
+    transition: opacity 0.3s ease;
+    opacity: 0;
+  `;
+  
+  // Insert blur container before overlay
+  document.body.insertBefore(blurContainer, overlay);
+  
+  // Show with animation
   setTimeout(() => {
     overlay.classList.add('active');
-    // Apply blur only when overlay is successfully shown
-    if (document.documentElement) {
-      document.documentElement.style.filter = 'blur(2px)';
-    }
+    blurContainer.style.opacity = '1';
     const input = document.getElementById('intention-input');
     if (input) input.focus();
   }, 100);
   
-  // Failsafe: Clear blur after 10 seconds if overlay is still present but something went wrong
+  // Store blur container reference
+  currentOverlay.blurContainer = blurContainer;
+  
+  // Failsafe: Remove blur after 10 seconds if something goes wrong
   setTimeout(() => {
-    if (currentOverlay && document.documentElement && document.documentElement.style.filter.includes('blur')) {
-      console.warn('FocusGuard: Failsafe clearing stuck blur');
-      clearPageBlur();
+    if (currentOverlay && currentOverlay.blurContainer) {
+      const blurElement = document.querySelector('.focusguard-blur-container');
+      if (blurElement && blurElement.style.opacity === '1') {
+        console.warn('FocusGuard: Failsafe removing stuck blur');
+        blurElement.remove();
+      }
     }
+    clearPageBlur();
   }, 10000);
 }
 
@@ -295,11 +345,19 @@ function setupOverlayEventListeners(overlay, siteName) {
     });
   }
   
-  // Keyboard shortcuts
+  // Enhanced keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const skipBtn = document.getElementById('skip-btn');
       if (skipBtn) skipBtn.click();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter or Cmd+Enter to submit intention
+      e.preventDefault();
+      const textarea = document.getElementById('intention-input');
+      if (textarea && textarea.value.trim()) {
+        const setBtn = document.getElementById('set-intention-btn');
+        if (setBtn) setBtn.click();
+      }
     } else if (e.key === 'Enter' && !e.shiftKey) {
       const textarea = document.getElementById('intention-input');
       if (document.activeElement === textarea && textarea.value.trim()) {
@@ -307,6 +365,19 @@ function setupOverlayEventListeners(overlay, siteName) {
         const setBtn = document.getElementById('set-intention-btn');
         if (setBtn) setBtn.click();
       }
+    } else if (e.key >= '1' && e.key <= '4' && e.ctrlKey) {
+      // Ctrl+1-4 for quick duration selection
+      e.preventDefault();
+      const durationChips = overlay.querySelectorAll('.duration-chip');
+      const chipIndex = parseInt(e.key) - 1;
+      if (durationChips[chipIndex]) {
+        durationChips[chipIndex].click();
+      }
+    } else if (e.key === 's' && e.ctrlKey) {
+      // Ctrl+S to skip (alternative to Escape)
+      e.preventDefault();
+      const skipBtn = document.getElementById('skip-btn');
+      if (skipBtn) skipBtn.click();
     }
   });
   
@@ -397,12 +468,15 @@ function handleSkip() {
 // Remove intention overlay
 function removeIntentionOverlay() {
   if (currentOverlay) {
-    // Clear blur immediately, not after animation
-    if (document.documentElement) {
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.filter = '';
-      document.documentElement.style.transition = '';
+    // Remove blur container immediately
+    const blurContainer = document.querySelector('.focusguard-blur-container');
+    if (blurContainer) {
+      blurContainer.style.opacity = '0';
+      setTimeout(() => blurContainer.remove(), 300);
     }
+    
+    // Clear any other blur effects
+    clearPageBlur();
     
     currentOverlay.classList.remove('active');
     setTimeout(() => {
@@ -410,7 +484,16 @@ function removeIntentionOverlay() {
         currentOverlay.remove();
         currentOverlay = null;
       }
+      // Double-check everything is cleaned up
+      clearPageBlur();
+      const remainingBlur = document.querySelector('.focusguard-blur-container');
+      if (remainingBlur) remainingBlur.remove();
     }, 300);
+  } else {
+    // Even if no overlay, ensure blur is cleared
+    clearPageBlur();
+    const anyBlurContainer = document.querySelector('.focusguard-blur-container');
+    if (anyBlurContainer) anyBlurContainer.remove();
   }
 }
 
@@ -428,7 +511,7 @@ function showFocusTimer(duration, intention = null) {
     // Get intention from service worker if not provided
     if (!intention) {
       chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
-        if (session && session.intention) {
+        if (!chrome.runtime.lastError && session && session.intention) {
           showFocusTimer(duration, session.intention);
         } else {
           showFocusTimer(duration, 'Focus Session');
@@ -838,6 +921,71 @@ function showAppreciationMessage(notification) {
   }
 }
 
+// Load intention templates
+function loadIntentionTemplates(siteName) {
+  chrome.runtime.sendMessage({
+    action: 'getIntentionTemplates',
+    site: siteName
+  }, (response) => {
+    if (chrome.runtime.lastError || !response) {
+      console.log('FocusGuard: Could not load templates');
+      return;
+    }
+    
+    const templates = response.templates || [];
+    const templatesContainer = document.getElementById('templates-container');
+    const templateChips = document.getElementById('template-chips');
+    
+    if (!templatesContainer || !templateChips || templates.length === 0) {
+      return;
+    }
+    
+    try {
+      const sanitizedTemplates = templates.map(template => sanitizeInput(template, 100));
+      
+      templateChips.innerHTML = sanitizedTemplates.map(template => 
+        `<button class="template-chip" data-template="${template}">${template}</button>`
+      ).join('');
+      
+      templatesContainer.style.display = 'block';
+      
+      // Add click handlers
+      templateChips.querySelectorAll('.template-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          try {
+            const intentionInput = document.getElementById('intention-input');
+            const validationDiv = document.getElementById('input-validation');
+            
+            if (intentionInput && validationDiv) {
+              intentionInput.value = chip.dataset.template;
+              validateIntention(chip.dataset.template, validationDiv);
+              chip.classList.add('selected');
+              intentionInput.focus();
+              
+              // Update character counter
+              const charCounter = document.getElementById('char-counter');
+              if (charCounter) {
+                charCounter.textContent = `${chip.dataset.template.length}/200`;
+              }
+              
+              // Hide templates after selection
+              setTimeout(() => {
+                if (templatesContainer) {
+                  templatesContainer.style.display = 'none';
+                }
+              }, 500);
+            }
+          } catch (error) {
+            console.error('FocusGuard: Error handling template click:', error);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('FocusGuard: Error loading templates:', error);
+    }
+  });
+}
+
 // Load intention suggestions
 function loadIntentionSuggestions(siteName) {
   const suggestions = getIntentionSuggestions(siteName);
@@ -1002,16 +1150,67 @@ function addRippleEffect(button) {
 
 // Ensure page is never stuck with blur
 function clearPageBlur() {
-  if (document.documentElement) {
-    document.documentElement.style.filter = '';
-    document.documentElement.style.transition = '';
-    document.documentElement.style.overflow = '';
+  try {
+    // Remove any blur containers
+    document.querySelectorAll('.focusguard-blur-container').forEach(el => el.remove());
+    
+    // Clear any direct blur styles
+    if (document.documentElement) {
+      document.documentElement.style.removeProperty('filter');
+      document.documentElement.style.removeProperty('transition');
+      document.documentElement.style.removeProperty('overflow');
+    }
+    if (document.body) {
+      document.body.style.removeProperty('filter');
+      document.body.style.removeProperty('overflow');
+    }
+    
+    // Remove any inline blur styles
+    const allElements = document.querySelectorAll('[style*="blur"]');
+    allElements.forEach(el => {
+      // Skip our own overlay elements
+      if (el.classList.contains('focusguard-overlay') || 
+          el.classList.contains('focusguard-modal')) {
+        return;
+      }
+      const currentStyle = el.getAttribute('style');
+      if (currentStyle && currentStyle.includes('blur')) {
+        const newStyle = currentStyle.replace(/(?:backdrop-)?filter\s*:\s*blur\([^)]+\)\s*;?/gi, '');
+        el.setAttribute('style', newStyle);
+      }
+    });
+  } catch (e) {
+    console.warn('FocusGuard: Could not clear blur styles:', e);
+  }
+}
+
+// Theme management
+function initializeTheme() {
+  // Check for saved theme preference
+  chrome.storage.local.get(['themePreference'], (data) => {
+    const preference = data.themePreference || 'system';
+    applyTheme(preference);
+  });
+}
+
+function applyTheme(preference) {
+  const root = document.documentElement;
+  
+  if (preference === 'system') {
+    // Use system preference
+    root.removeAttribute('data-theme');
+  } else {
+    // Use explicit preference
+    root.setAttribute('data-theme', preference);
   }
 }
 
 // Initialize content script
 function initializeContentScript() {
   if (isInitialized) return;
+  
+  // Initialize theme
+  initializeTheme();
   
   // Always clear blur first, regardless of site
   clearPageBlur();
@@ -1031,6 +1230,17 @@ function initializeContentScript() {
     if (chrome.runtime.lastError) {
       console.error('FocusGuard: Error checking intention needed:', chrome.runtime.lastError);
       clearPageBlur(); // Clear blur if there's an error
+      // Try again after a short delay
+      setTimeout(() => {
+        chrome.runtime.sendMessage({
+          action: 'checkIntentionNeeded',
+          site: siteName
+        }, (retryResponse) => {
+          if (!chrome.runtime.lastError && retryResponse && retryResponse.needsIntention) {
+            showIntentionOverlay(siteName);
+          }
+        });
+      }, 500);
       return;
     }
     
@@ -1041,11 +1251,11 @@ function initializeContentScript() {
       console.log('FocusGuard: No intention needed, checking for active session');
       // Check if there's an active session to restore timer
       chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
-        if (session && session.duration > 0) {
+        if (!chrome.runtime.lastError && session && session.duration > 0) {
           const elapsed = Date.now() - session.startTime;
           const remaining = Math.max(0, session.duration - elapsed);
           if (remaining > 0) {
-            showFocusTimer(Math.ceil(remaining / 60000));
+            showFocusTimer(Math.ceil(remaining / 60000), session.intention);
           }
         }
       });
@@ -1077,6 +1287,19 @@ if (document.readyState === 'loading') {
 
 // Also initialize after a short delay for SPA navigation
 setTimeout(initializeContentScript, 1000);
+
+// Handle URL changes for single-page applications
+let lastUrl = location.href;
+new MutationObserver(() => {
+  const url = location.href;
+  if (url !== lastUrl) {
+    lastUrl = url;
+    console.log('FocusGuard: URL changed, reinitializing');
+    clearPageBlur(); // Clear any existing blur
+    isInitialized = false;
+    setTimeout(initializeContentScript, 100);
+  }
+}).observe(document, {subtree: true, childList: true});
 
 // Handle page visibility changes
 document.addEventListener('visibilitychange', () => {

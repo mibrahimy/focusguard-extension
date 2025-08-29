@@ -14,6 +14,14 @@ async function updatePopup() {
     
     console.log('FocusGuard Popup: Active tab:', tab.url);
     
+    // Check if we can communicate with the service worker
+    const canCommunicate = await checkServiceWorkerConnection();
+    if (!canCommunicate) {
+      console.error('FocusGuard Popup: Cannot communicate with service worker');
+      showConnectionError();
+      return;
+    }
+    
     // Add timeout to prevent hanging
     const messageTimeout = setTimeout(() => {
       console.error('FocusGuard Popup: Message timeout - background script may not be responding');
@@ -24,7 +32,8 @@ async function updatePopup() {
       clearTimeout(messageTimeout);
       if (chrome.runtime.lastError) {
         console.error('FocusGuard Popup: Error getting session:', chrome.runtime.lastError);
-        showErrorState();
+        // Try to recover by reinitializing
+        setTimeout(updatePopup, 1000);
         return;
       }
       
@@ -259,6 +268,36 @@ function initializePopup() {
   }
   
   updatePopup();
+}
+
+// Helper function to check service worker connection
+async function checkServiceWorkerConnection() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'ping' }, (response) => {
+      resolve(!chrome.runtime.lastError);
+    });
+  });
+}
+
+// Show connection error state
+function showConnectionError() {
+  const noSessionEl = document.getElementById('no-session');
+  const activeSessionEl = document.getElementById('active-session');
+  
+  if (noSessionEl && activeSessionEl) {
+    noSessionEl.style.display = 'block';
+    activeSessionEl.style.display = 'none';
+    
+    const statusTextEl = noSessionEl.querySelector('.status-text');
+    const helpTextEl = noSessionEl.querySelector('.help-text');
+    
+    if (statusTextEl) {
+      statusTextEl.textContent = 'Connecting to FocusGuard...';
+    }
+    if (helpTextEl) {
+      helpTextEl.textContent = 'Please wait or refresh the page if this persists.';
+    }
+  }
 }
 
 // Try multiple initialization methods

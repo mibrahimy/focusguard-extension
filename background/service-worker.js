@@ -212,19 +212,37 @@ chrome.runtime.onInstalled.addListener(() => {
     totalTimeSpent: {},
     distractionCount: 0,
     activeSessions: {},
+    intentionTemplates: {
+      YouTube: [
+        'Learn React hooks for my project',
+        'Watch Python tutorial series',
+        'Research new design trends',
+        'Follow coding best practices guide',
+        'Watch conference talk on AI',
+        'Learn new JavaScript framework'
+      ],
+      WhatsApp: [
+        'Check important family messages',
+        'Coordinate team meeting for Friday',
+        'Share project document with Sarah',
+        'Reply to client about deliverables',
+        'Plan weekend social activity',
+        'Follow up on pending conversation'
+      ]
+    },
     performanceMetrics: {
       installTime: Date.now(),
       version: chrome.runtime.getManifest().version
     }
   });
-  console.log('FocusGuard: Extension installed/updated with new architecture');
+  console.log('FocusGuard: Extension installed/updated with templates');
 });
 
 chrome.runtime.onStartup.addListener(initializeServiceWorker);
 
 // Web navigation - coordinate with content scripts instead of injecting
-chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
-  console.log('FocusGuard: Navigation detected', details.url);
+chrome.webNavigation.onCommitted.addListener(async (details) => {
+  console.log('FocusGuard: Navigation committed', details.url);
   
   if (details.frameId !== 0) return;
   
@@ -255,16 +273,29 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
       if (needsIntention) {
         console.log('FocusGuard: Will request intention from content script for', siteName);
         
-        // Store the navigation details for the content script
+        // Store the navigation details for the content script using local storage as fallback
         try {
-          await chrome.storage.session.set({ 
-            [`navigation_${tabId}`]: { 
-              url: details.url, 
-              site: siteName,
-              timestamp: Date.now(),
-              requiresIntention: true
-            } 
-          });
+          // Try session storage first
+          if (chrome.storage.session) {
+            await chrome.storage.session.set({ 
+              [`navigation_${tabId}`]: { 
+                url: details.url, 
+                site: siteName,
+                timestamp: Date.now(),
+                requiresIntention: true
+              } 
+            });
+          } else {
+            // Fallback to local storage
+            await chrome.storage.local.set({ 
+              [`navigation_${tabId}`]: { 
+                url: details.url, 
+                site: siteName,
+                timestamp: Date.now(),
+                requiresIntention: true
+              } 
+            });
+          }
         } catch (error) {
           console.error('FocusGuard: Failed to store navigation data:', error);
         }
@@ -286,7 +317,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   console.log('FocusGuard: Received message:', request.action);
   
-  if (request.action === 'checkIntentionNeeded') {
+  if (request.action === 'ping') {
+    // Simple ping response for connection check
+    sendResponse({ pong: true });
+    
+  } else if (request.action === 'checkIntentionNeeded') {
     // Content script asks if intention is needed
     const { site, tabId } = request;
     checkIntentionRequired(site, tabId || sender.tab?.id).then(needed => {
@@ -339,6 +374,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         tabId: tabId,
         version: 1 // Schema version for future migrations
       };
+      
+      // Also save to sessions array for dashboard
+      chrome.storage.local.get(['sessions'], (data) => {
+        const sessions = data.sessions || [];
+        sessions.push({
+          timestamp: Date.now(),
+          site: sanitizedSite,
+          intention: sanitizedIntention,
+          duration: Math.floor(duration) * 60 * 1000
+        });
+        
+        // Keep only last 1000 sessions
+        if (sessions.length > 1000) {
+          sessions.splice(0, sessions.length - 1000);
+        }
+        
+        chrome.storage.local.set({ sessions });
+      });
       
       // Atomic storage transaction with rollback capability
       const originalActiveSessions = { ...activeSessions };
@@ -405,6 +458,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const session = activeSessions[tabId];
     sendResponse(session || null);
     
+  } else if (request.action === 'getIntentionTemplates') {
+    chrome.storage.local.get(['intentionTemplates'], (data) => {
+      const templates = data.intentionTemplates || {};
+      sendResponse({ templates: templates[request.site] || [] });
+    });
+    return true;
+    
   } else if (request.action === 'trackActivity') {
     const { site, activityType, activityData } = request;
     
@@ -436,6 +496,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
       
       chrome.storage.local.set({ activityLog: activities });
+    });
+    
+    sendResponse({ success: true });
+  } else if (request.action === 'trackSessionReflection') {
+    const { outcome } = request;
+    
+    chrome.storage.local.get(['sessionReflections'], (data) => {
+      const reflections = data.sessionReflections || [];
+      
+      reflections.push({
+        timestamp: Date.now(),
+        outcome: outcome,
+        tabId: sender.tab?.id
+      });
+      
+      // Keep only last 1000 reflections
+      if (reflections.length > 1000) {
+        reflections.splice(0, reflections.length - 1000);
+      }
+      
+      chrome.storage.local.set({ sessionReflections: reflections });
     });
     
     sendResponse({ success: true });

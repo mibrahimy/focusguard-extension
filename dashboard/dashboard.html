@@ -27,6 +27,20 @@
               <option value="all">All Time</option>
             </select>
           </div>
+          <div class="theme-toggle">
+            <button class="theme-option" data-theme="light">
+              <span class="theme-icon">☀️</span>
+              Light
+            </button>
+            <button class="theme-option active" data-theme="system">
+              <span class="theme-icon">🌓</span>
+              Auto
+            </button>
+            <button class="theme-option" data-theme="dark">
+              <span class="theme-icon">🌙</span>
+              Dark
+            </button>
+          </div>
           <button id="settings-btn" class="icon-btn" title="Settings">
             <span class="icon">⚙️</span>
           </button>
@@ -316,10 +330,16 @@
         <div class="setting-group">
           <h4>Data & Privacy</h4>
           <div class="setting-item">
-            <button class="setting-btn secondary" id="export-data">
-              <span class="btn-icon">📊</span>
-              Export My Data
-            </button>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <button class="setting-btn secondary" id="export-csv">
+                <span class="btn-icon">📊</span>
+                Export as CSV
+              </button>
+              <button class="setting-btn secondary" id="export-json">
+                <span class="btn-icon">🔧</span>
+                Export as JSON
+              </button>
+            </div>
             <p class="setting-description">Download your mindfulness data</p>
           </div>
           <div class="setting-item">
