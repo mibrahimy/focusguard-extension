@@ -212,30 +212,13 @@ chrome.runtime.onInstalled.addListener(() => {
     totalTimeSpent: {},
     distractionCount: 0,
     activeSessions: {},
-    intentionTemplates: {
-      YouTube: [
-        'Learn React hooks for my project',
-        'Watch Python tutorial series',
-        'Research new design trends',
-        'Follow coding best practices guide',
-        'Watch conference talk on AI',
-        'Learn new JavaScript framework'
-      ],
-      WhatsApp: [
-        'Check important family messages',
-        'Coordinate team meeting for Friday',
-        'Share project document with Sarah',
-        'Reply to client about deliverables',
-        'Plan weekend social activity',
-        'Follow up on pending conversation'
-      ]
-    },
+    recentIntentions: {},
     performanceMetrics: {
       installTime: Date.now(),
       version: chrome.runtime.getManifest().version
     }
   });
-  console.log('FocusGuard: Extension installed/updated with templates');
+  console.log('FocusGuard: Extension installed/updated');
 });
 
 chrome.runtime.onStartup.addListener(initializeServiceWorker);
@@ -376,7 +359,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       };
       
       // Also save to sessions array for dashboard
-      chrome.storage.local.get(['sessions'], (data) => {
+      chrome.storage.local.get(['sessions', 'recentIntentions'], (data) => {
         const sessions = data.sessions || [];
         sessions.push({
           timestamp: Date.now(),
@@ -390,7 +373,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           sessions.splice(0, sessions.length - 1000);
         }
         
-        chrome.storage.local.set({ sessions });
+        // Update recent intentions for this site
+        const recentIntentions = data.recentIntentions || {};
+        if (!recentIntentions[sanitizedSite]) {
+          recentIntentions[sanitizedSite] = [];
+        }
+        
+        // Add the new intention if it's not already in the list
+        const intentions = recentIntentions[sanitizedSite];
+        const existingIndex = intentions.indexOf(sanitizedIntention);
+        if (existingIndex > -1) {
+          // Move existing intention to the front
+          intentions.splice(existingIndex, 1);
+        }
+        intentions.unshift(sanitizedIntention);
+        
+        // Keep only the last 5 unique intentions
+        if (intentions.length > 5) {
+          intentions.splice(5);
+        }
+        
+        recentIntentions[sanitizedSite] = intentions;
+        
+        chrome.storage.local.set({ sessions, recentIntentions });
       });
       
       // Atomic storage transaction with rollback capability
@@ -459,9 +464,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse(session || null);
     
   } else if (request.action === 'getIntentionTemplates') {
-    chrome.storage.local.get(['intentionTemplates'], (data) => {
-      const templates = data.intentionTemplates || {};
-      sendResponse({ templates: templates[request.site] || [] });
+    chrome.storage.local.get(['recentIntentions'], (data) => {
+      const recentIntentions = data.recentIntentions || {};
+      sendResponse({ templates: recentIntentions[request.site] || [] });
     });
     return true;
     

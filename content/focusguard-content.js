@@ -106,13 +106,8 @@ function showIntentionOverlay(siteName) {
       
       <div class="modal-content">
         <div class="templates-container" id="templates-container" style="display: none;">
-          <label class="field-label">Recent templates:</label>
+          <label class="field-label">Your recent goals:</label>
           <div class="template-chips" id="template-chips"></div>
-        </div>
-        
-        <div class="suggestions-container" id="suggestions-container" style="display: none;">
-          <label class="field-label">Quick suggestions:</label>
-          <div class="suggestion-chips" id="suggestion-chips"></div>
         </div>
         
         <div class="reflection-section">
@@ -126,7 +121,7 @@ function showIntentionOverlay(siteName) {
           <textarea 
             id="intention-input" 
             placeholder="${getIntentionPlaceholder(siteName)}"
-            rows="3"
+            rows="2"
             aria-label="Your specific intention for this session"
             aria-describedby="input-validation"
             maxlength="200"
@@ -184,10 +179,9 @@ function showIntentionOverlay(siteName) {
   // Setup event listeners
   setupOverlayEventListeners(overlay, siteName);
   
-  // Load templates and suggestions with staggered animation
+  // Load templates with staggered animation
   setTimeout(() => {
     loadIntentionTemplates(siteName);
-    loadIntentionSuggestions(siteName);
   }, 300);
   
   // Create a blur container for all body content except our overlay
@@ -212,27 +206,36 @@ function showIntentionOverlay(siteName) {
   document.body.insertBefore(blurContainer, overlay);
   
   // Show with animation
-  setTimeout(() => {
-    overlay.classList.add('active');
-    blurContainer.style.opacity = '1';
-    const input = document.getElementById('intention-input');
-    if (input) input.focus();
-  }, 100);
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      overlay.classList.add('active');
+      if (blurContainer && blurContainer.parentNode) {
+        blurContainer.style.opacity = '1';
+      }
+      const input = document.getElementById('intention-input');
+      if (input) input.focus();
+    }, 50);
+  });
   
   // Store blur container reference
   currentOverlay.blurContainer = blurContainer;
   
-  // Failsafe: Remove blur after 10 seconds if something goes wrong
-  setTimeout(() => {
-    if (currentOverlay && currentOverlay.blurContainer) {
-      const blurElement = document.querySelector('.focusguard-blur-container');
-      if (blurElement && blurElement.style.opacity === '1') {
-        console.warn('FocusGuard: Failsafe removing stuck blur');
-        blurElement.remove();
-      }
+  // Failsafe: Remove blur after 30 seconds if dialog is still open
+  // This is a safety measure, not expected to trigger normally
+  const failsafeTimeout = setTimeout(() => {
+    const blurElement = document.querySelector('.focusguard-blur-container');
+    const overlayElement = document.querySelector('.focusguard-overlay');
+    
+    // Only trigger failsafe if blur exists but overlay is gone (stuck state)
+    if (blurElement && !overlayElement) {
+      console.warn('FocusGuard: Failsafe removing stuck blur');
+      blurElement.remove();
+      clearPageBlur();
     }
-    clearPageBlur();
-  }, 10000);
+  }, 30000);
+  
+  // Store timeout reference so we can clear it when overlay is properly removed
+  currentOverlay.failsafeTimeout = failsafeTimeout;
 }
 
 // Setup event listeners for overlay
@@ -271,6 +274,8 @@ function setupOverlayEventListeners(overlay, siteName) {
         const durationInput = document.getElementById('duration-input');
         if (durationInput) {
           durationInput.value = chip.dataset.duration;
+          // Trigger the input event to update the preview
+          durationInput.dispatchEvent(new Event('input'));
         }
       } catch (error) {
         console.error('FocusGuard: Error handling duration chip:', error);
@@ -282,18 +287,27 @@ function setupOverlayEventListeners(overlay, siteName) {
   const durationInput = document.getElementById('duration-input');
   const durationPreview = document.getElementById('duration-preview');
   
-  if (durationInput) {
-    const updateDurationPreview = () => {
-      const minutes = parseInt(durationInput.value) || 15;
-      const endTime = new Date(Date.now() + minutes * 60000);
-      const timeString = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      if (durationPreview) {
-        durationPreview.textContent = `Until ${timeString}`;
-      }
-    };
+  // Function to update duration preview
+  const updateDurationPreview = () => {
+    if (!durationInput || !durationPreview) return;
     
+    const minutes = parseInt(durationInput.value) || 15;
+    const endTime = new Date(Date.now() + minutes * 60000);
+    const timeString = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    durationPreview.textContent = `Until ${timeString}`;
+    
+    // Update active chip to match current value
+    overlay.querySelectorAll('.duration-chip').forEach(chip => {
+      if (parseInt(chip.dataset.duration) === minutes) {
+        chip.classList.add('active');
+      } else {
+        chip.classList.remove('active');
+      }
+    });
+  };
+  
+  if (durationInput) {
     durationInput.addEventListener('input', () => {
-      overlay.querySelectorAll('.duration-chip').forEach(c => c.classList.remove('active'));
       updateDurationPreview();
     });
     
@@ -468,23 +482,33 @@ function handleSkip() {
 // Remove intention overlay
 function removeIntentionOverlay() {
   if (currentOverlay) {
-    // Remove blur container immediately
+    // Clear failsafe timeout since we're properly removing the overlay
+    if (currentOverlay.failsafeTimeout) {
+      clearTimeout(currentOverlay.failsafeTimeout);
+    }
+    
+    // Remove blur container with fade animation
     const blurContainer = document.querySelector('.focusguard-blur-container');
     if (blurContainer) {
       blurContainer.style.opacity = '0';
-      setTimeout(() => blurContainer.remove(), 300);
+      setTimeout(() => {
+        if (blurContainer && blurContainer.parentNode) {
+          blurContainer.remove();
+        }
+      }, 300);
     }
     
     // Clear any other blur effects
     clearPageBlur();
     
+    // Remove overlay with animation
     currentOverlay.classList.remove('active');
     setTimeout(() => {
       if (currentOverlay && currentOverlay.parentNode) {
         currentOverlay.remove();
         currentOverlay = null;
       }
-      // Double-check everything is cleaned up
+      // Final cleanup check
       clearPageBlur();
       const remainingBlur = document.querySelector('.focusguard-blur-container');
       if (remainingBlur) remainingBlur.remove();
@@ -921,14 +945,14 @@ function showAppreciationMessage(notification) {
   }
 }
 
-// Load intention templates
+// Load intention templates (now loads recent user intentions)
 function loadIntentionTemplates(siteName) {
   chrome.runtime.sendMessage({
     action: 'getIntentionTemplates',
     site: siteName
   }, (response) => {
     if (chrome.runtime.lastError || !response) {
-      console.log('FocusGuard: Could not load templates');
+      console.log('FocusGuard: Could not load recent intentions');
       return;
     }
     
@@ -937,15 +961,18 @@ function loadIntentionTemplates(siteName) {
     const templateChips = document.getElementById('template-chips');
     
     if (!templatesContainer || !templateChips || templates.length === 0) {
+      // No recent intentions to show
       return;
     }
     
     try {
       const sanitizedTemplates = templates.map(template => sanitizeInput(template, 100));
       
-      templateChips.innerHTML = sanitizedTemplates.map(template => 
-        `<button class="template-chip" data-template="${template}">${template}</button>`
-      ).join('');
+      templateChips.innerHTML = sanitizedTemplates.map(template => {
+        // Truncate long intentions for display
+        const displayText = template.length > 40 ? template.substring(0, 37) + '...' : template;
+        return `<button class="template-chip" data-template="${template}" title="${template}">${displayText}</button>`;
+      }).join('');
       
       templatesContainer.style.display = 'block';
       
@@ -981,56 +1008,11 @@ function loadIntentionTemplates(siteName) {
         });
       });
     } catch (error) {
-      console.error('FocusGuard: Error loading templates:', error);
+      console.error('FocusGuard: Error loading recent intentions:', error);
     }
   });
 }
 
-// Load intention suggestions
-function loadIntentionSuggestions(siteName) {
-  const suggestions = getIntentionSuggestions(siteName);
-  const suggestionsContainer = document.getElementById('suggestions-container');
-  const suggestionChips = document.getElementById('suggestion-chips');
-  
-  if (!suggestionsContainer || !suggestionChips || suggestions.length === 0) {
-    return;
-  }
-  
-  try {
-    const sanitizedSuggestions = suggestions.map(suggestion => sanitizeInput(suggestion, 100));
-    
-    suggestionChips.innerHTML = sanitizedSuggestions.map(suggestion => 
-      `<button class="suggestion-chip" data-suggestion="${suggestion}">${suggestion}</button>`
-    ).join('');
-    
-    suggestionsContainer.style.display = 'block';
-    
-    // Add click handlers
-    suggestionChips.querySelectorAll('.suggestion-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        try {
-          const intentionInput = document.getElementById('intention-input');
-          const validationDiv = document.getElementById('input-validation');
-          
-          if (intentionInput && validationDiv) {
-            intentionInput.value = chip.dataset.suggestion;
-            validateIntention(chip.dataset.suggestion, validationDiv);
-            chip.classList.add('selected');
-            setTimeout(() => {
-              if (suggestionsContainer) {
-                suggestionsContainer.style.display = 'none';
-              }
-            }, 500);
-          }
-        } catch (error) {
-          console.error('FocusGuard: Error handling suggestion click:', error);
-        }
-      });
-    });
-  } catch (error) {
-    console.error('FocusGuard: Error loading suggestions:', error);
-  }
-}
 
 // Get reflection question for mindfulness
 function getReflectionQuestion(siteName) {
@@ -1052,29 +1034,6 @@ function getIntentionPlaceholder(siteName) {
   return placeholders[siteName] || 'Be specific about what you want to accomplish...';
 }
 
-// Get intention suggestions
-function getIntentionSuggestions(siteName) {
-  const suggestions = {
-    'YouTube': [
-      'Learn a specific skill or topic',
-      'Research for a work/school project',
-      'Follow a tutorial step-by-step', 
-      'Find inspiration for a hobby',
-      'Listen to focus/study music',
-      'Stay updated on industry news'
-    ],
-    'WhatsApp': [
-      'Check important messages from family',
-      'Coordinate upcoming work meeting',
-      'Share specific document or info',
-      'Plan weekend social activity',
-      'Follow up on pending conversation',
-      'Send quick update to team/friends'
-    ]
-  };
-  
-  return suggestions[siteName] || [];
-}
 
 // Validate intention
 function validateIntention(intention, validationDiv) {
