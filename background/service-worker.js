@@ -2,11 +2,15 @@
 // This service worker manages state and coordinates with content scripts
 // It does NOT inject DOM elements directly
 
-const MONITORED_SITES = {
-  'youtube.com': 'YouTube',
-  'whatsapp.com': 'WhatsApp',
-  'web.whatsapp.com': 'WhatsApp'
+// Legacy default sites - will be migrated to storage
+const DEFAULT_MONITORED_SITES = {
+  'youtube.com': { name: 'YouTube', icon: '🎥', removable: false },
+  'whatsapp.com': { name: 'WhatsApp', icon: '💬', removable: false },
+  'web.whatsapp.com': { name: 'WhatsApp', icon: '💬', removable: false }
 };
+
+// Dynamic monitored sites - loaded from storage
+let MONITORED_SITES = {};
 
 // State management - persisted in chrome.storage
 let activeSessions = {};
@@ -23,10 +27,44 @@ let performanceMetrics = {
   lastReset: Date.now()
 };
 
+// Load monitored sites from storage
+async function loadMonitoredSites() {
+  try {
+    const data = await chrome.storage.local.get(['monitoredSites']);
+    
+    if (!data.monitoredSites) {
+      // Initialize with defaults
+      const defaultSites = {
+        defaults: DEFAULT_MONITORED_SITES,
+        custom: {}
+      };
+      await chrome.storage.local.set({ monitoredSites: defaultSites });
+      MONITORED_SITES = { ...DEFAULT_MONITORED_SITES };
+    } else {
+      // Combine defaults and custom sites
+      MONITORED_SITES = {
+        ...data.monitoredSites.defaults,
+        ...data.monitoredSites.custom
+      };
+    }
+    
+    console.log('FocusGuard: Loaded monitored sites:', Object.keys(MONITORED_SITES));
+    return MONITORED_SITES;
+  } catch (error) {
+    console.error('FocusGuard: Error loading monitored sites:', error);
+    // Fallback to defaults
+    MONITORED_SITES = { ...DEFAULT_MONITORED_SITES };
+    return MONITORED_SITES;
+  }
+}
+
 // Initialize service worker state
 async function initializeServiceWorker() {
   try {
     console.log('FocusGuard: Initializing service worker');
+    
+    // Load monitored sites first
+    await loadMonitoredSites();
     
     // Restore state from storage
     const result = await retryStorageOperation(() => 
@@ -248,9 +286,10 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   
   const hostname = url.hostname.replace('www.', '');
   
-  for (const [site, siteName] of Object.entries(MONITORED_SITES)) {
+  for (const [site, siteData] of Object.entries(MONITORED_SITES)) {
     if (hostname.includes(site)) {
       const tabId = details.tabId;
+      const siteName = typeof siteData === 'string' ? siteData : siteData.name;
       const needsIntention = await checkIntentionRequired(siteName, tabId);
       
       if (needsIntention) {
@@ -504,6 +543,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     
     sendResponse({ success: true });
+    
+  } else if (request.action === 'getMonitoredSites') {
+    // Content script requests monitored sites
+    sendResponse({ sites: MONITORED_SITES });
+    
+  } else if (request.action === 'sitesUpdated') {
+    // Dashboard notifies that sites have been updated
+    loadMonitoredSites().then(() => {
+      console.log('FocusGuard: Monitored sites reloaded');
+      // Inject content scripts into newly added sites if tab is already open
+      injectContentScriptsForNewSites();
+    });
+    sendResponse({ success: true });
+    
   } else if (request.action === 'trackSessionReflection') {
     const { outcome } = request;
     
@@ -576,6 +629,53 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
     await saveState();
   }
 });
+
+// Inject content scripts for newly added sites
+async function injectContentScriptsForNewSites() {
+  try {
+    // Get all tabs
+    const tabs = await chrome.tabs.query({});
+    
+    for (const tab of tabs) {
+      if (!tab.url) continue;
+      
+      const url = new URL(tab.url);
+      const hostname = url.hostname.replace('www.', '');
+      
+      // Check if this site is monitored
+      const isMonitored = Object.keys(MONITORED_SITES).some(site => 
+        hostname.includes(site)
+      );
+      
+      if (isMonitored) {
+        // Check if content script is already injected
+        try {
+          await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+          // If we get here, script is already injected
+        } catch {
+          // Script not injected, inject it now
+          console.log(`FocusGuard: Injecting content script into ${hostname}`);
+          
+          try {
+            await chrome.scripting.insertCSS({
+              target: { tabId: tab.id },
+              files: ['assets/css/content.css']
+            });
+            
+            await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files: ['content/focusguard-content.js']
+            });
+          } catch (error) {
+            console.warn(`FocusGuard: Could not inject into tab ${tab.id}:`, error);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('FocusGuard: Error injecting content scripts:', error);
+  }
+}
 
 // Initialize on startup
 initializeServiceWorker();

@@ -22,23 +22,63 @@ console.log('FocusGuard: Content script loaded');
   }
 })();
 
-const MONITORED_SITES = {
-  'youtube.com': 'YouTube',
-  'whatsapp.com': 'WhatsApp',
-  'web.whatsapp.com': 'WhatsApp'
-};
+// Dynamic monitored sites - loaded from service worker
+let MONITORED_SITES = {};
 
 // State
 let currentOverlay = null;
 let currentTimer = null;
 let isInitialized = false;
 
+// Safe message sender helper
+function safeSendMessage(message, callback) {
+  // Check if extension context is valid
+  if (!chrome.runtime?.id) {
+    console.warn('FocusGuard: Extension context invalidated, cannot send message');
+    if (callback) callback(null);
+    return;
+  }
+  
+  try {
+    chrome.runtime.sendMessage(message, (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn('FocusGuard: Message error:', chrome.runtime.lastError);
+        if (callback) callback(null);
+      } else {
+        if (callback) callback(response);
+      }
+    });
+  } catch (error) {
+    console.error('FocusGuard: Error sending message:', error);
+    if (callback) callback(null);
+  }
+}
+
+// Load monitored sites from service worker
+async function loadMonitoredSites() {
+  return new Promise((resolve) => {
+    safeSendMessage({ action: 'getMonitoredSites' }, (response) => {
+      if (response && response.sites) {
+        MONITORED_SITES = response.sites;
+      } else {
+        // Fallback to defaults
+        MONITORED_SITES = {
+          'youtube.com': { name: 'YouTube', icon: '🎥' },
+          'whatsapp.com': { name: 'WhatsApp', icon: '💬' },
+          'web.whatsapp.com': { name: 'WhatsApp', icon: '💬' }
+        };
+      }
+      resolve(MONITORED_SITES);
+    });
+  });
+}
+
 // Get current site name
 function getCurrentSite() {
   const hostname = window.location.hostname.replace('www.', '');
-  for (const [site, siteName] of Object.entries(MONITORED_SITES)) {
+  for (const [site, siteData] of Object.entries(MONITORED_SITES)) {
     if (hostname.includes(site)) {
-      return siteName;
+      return siteData.name || siteData; // Handle both new format and legacy string format
     }
   }
   return null;
@@ -87,11 +127,21 @@ function showIntentionOverlay(siteName) {
   
   const overlay = document.createElement('div');
   overlay.className = 'focusguard-overlay';
+  // Get site icon
+  const hostname = window.location.hostname.replace('www.', '');
+  let siteIcon = '🌐';
+  for (const [site, siteData] of Object.entries(MONITORED_SITES)) {
+    if (hostname.includes(site)) {
+      siteIcon = siteData.icon || (siteName === 'YouTube' ? '🎥' : '💬');
+      break;
+    }
+  }
+  
   overlay.innerHTML = `
     <div class="focusguard-backdrop" aria-hidden="true"></div>
     <div class="focusguard-modal" role="dialog" aria-modal="true" aria-labelledby="focus-title" aria-describedby="focus-subtitle">
       <div class="modal-header">
-        <div class="site-icon" aria-hidden="true">${siteName === 'YouTube' ? '🎥' : '💬'}</div>
+        <div class="site-icon" aria-hidden="true">${siteIcon}</div>
         <h2 id="focus-title">Take a mindful moment...</h2>
         <p id="focus-subtitle" class="subtitle">You're about to visit ${sanitizedSiteName}. Let's set a clear intention first.</p>
         <div class="context-hint">
@@ -441,15 +491,16 @@ function handleSetIntention(siteName) {
     btn.innerHTML = '<span class="spinner"></span><span class="btn-text">Starting session...</span>';
     
     // Send to service worker
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: 'setIntention',
       site: siteName,
       intention: sanitizedIntention,
       duration
     }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('FocusGuard: Error setting intention:', chrome.runtime.lastError);
-        btn.classList.remove('loading');
+      btn.classList.remove('loading');
+      
+      if (!response) {
+        console.error('FocusGuard: Could not connect to service worker');
         btn.innerHTML = '<span class="btn-text">Error - Try again</span>';
         btn.style.background = 'var(--md-sys-color-error)';
         setTimeout(() => {
@@ -459,12 +510,18 @@ function handleSetIntention(siteName) {
         return;
       }
       
-      if (response && response.success) {
+      if (response.success) {
         console.log('FocusGuard: Intention set successfully');
         removeIntentionOverlay();
         showFocusTimer(duration, sanitizedIntention);
       } else {
         console.error('FocusGuard: Failed to set intention:', response?.error);
+        btn.innerHTML = '<span class="btn-text">Error - Try again</span>';
+        btn.style.background = 'var(--md-sys-color-error)';
+        setTimeout(() => {
+          btn.innerHTML = '<span class="btn-text">Begin focused session</span><div class="btn-ripple"></div>';
+          btn.style.background = '';
+        }, 3000);
       }
     });
     
@@ -534,8 +591,8 @@ function showFocusTimer(duration, intention = null) {
     
     // Get intention from service worker if not provided
     if (!intention) {
-      chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
-        if (!chrome.runtime.lastError && session && session.intention) {
+      safeSendMessage({ action: 'getActiveSession' }, (session) => {
+        if (session && session.intention) {
           showFocusTimer(duration, session.intention);
         } else {
           showFocusTimer(duration, 'Focus Session');
@@ -777,7 +834,7 @@ function showTimeUpNotification() {
     const notification = document.createElement('div');
     notification.className = 'focusguard-notification enhanced';
     // Get current session for personalized message
-    chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
+    safeSendMessage({ action: 'getActiveSession' }, (session) => {
       const intention = session?.intention || 'your goal';
       
       notification.innerHTML = `
@@ -869,7 +926,7 @@ function addNotificationEventListeners(notification) {
         showReflectionFeedback(notification, outcome);
         
         // Track reflection
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: 'trackSessionReflection',
           outcome
         });
@@ -947,11 +1004,11 @@ function showAppreciationMessage(notification) {
 
 // Load intention templates (now loads recent user intentions)
 function loadIntentionTemplates(siteName) {
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'getIntentionTemplates',
     site: siteName
   }, (response) => {
-    if (chrome.runtime.lastError || !response) {
+    if (!response) {
       console.log('FocusGuard: Could not load recent intentions');
       return;
     }
@@ -1145,11 +1202,25 @@ function clearPageBlur() {
 
 // Theme management
 function initializeTheme() {
+  // Check if extension context is valid
+  if (!chrome.storage?.local) {
+    console.warn('FocusGuard: Storage API not available');
+    return;
+  }
+  
   // Check for saved theme preference
-  chrome.storage.local.get(['themePreference'], (data) => {
-    const preference = data.themePreference || 'system';
-    applyTheme(preference);
-  });
+  try {
+    chrome.storage.local.get(['themePreference'], (data) => {
+      if (chrome.runtime.lastError) {
+        console.warn('FocusGuard: Error loading theme:', chrome.runtime.lastError);
+        return;
+      }
+      const preference = data.themePreference || 'system';
+      applyTheme(preference);
+    });
+  } catch (error) {
+    console.warn('FocusGuard: Error accessing storage:', error);
+  }
 }
 
 function applyTheme(preference) {
@@ -1165,7 +1236,7 @@ function applyTheme(preference) {
 }
 
 // Initialize content script
-function initializeContentScript() {
+async function initializeContentScript() {
   if (isInitialized) return;
   
   // Initialize theme
@@ -1173,6 +1244,9 @@ function initializeContentScript() {
   
   // Always clear blur first, regardless of site
   clearPageBlur();
+  
+  // Load monitored sites first
+  await loadMonitoredSites();
   
   const siteName = getCurrentSite();
   if (!siteName) {
@@ -1182,35 +1256,37 @@ function initializeContentScript() {
   console.log('FocusGuard: Initializing content script for', siteName);
   
   // Ask service worker if intention is needed
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'checkIntentionNeeded',
     site: siteName
   }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('FocusGuard: Error checking intention needed:', chrome.runtime.lastError);
-      clearPageBlur(); // Clear blur if there's an error
-      // Try again after a short delay
-      setTimeout(() => {
-        chrome.runtime.sendMessage({
-          action: 'checkIntentionNeeded',
-          site: siteName
-        }, (retryResponse) => {
-          if (!chrome.runtime.lastError && retryResponse && retryResponse.needsIntention) {
-            showIntentionOverlay(siteName);
-          }
-        });
-      }, 500);
+    if (!response) {
+      console.warn('FocusGuard: Could not check intention needed, clearing blur');
+      clearPageBlur();
+      // Try again after a short delay if context is still valid
+      if (chrome.runtime?.id) {
+        setTimeout(() => {
+          safeSendMessage({
+            action: 'checkIntentionNeeded',
+            site: siteName
+          }, (retryResponse) => {
+            if (retryResponse && retryResponse.needsIntention) {
+              showIntentionOverlay(siteName);
+            }
+          });
+        }, 500);
+      }
       return;
     }
     
-    if (response && response.needsIntention) {
+    if (response.needsIntention) {
       console.log('FocusGuard: Intention needed, showing overlay');
       showIntentionOverlay(siteName);
     } else {
       console.log('FocusGuard: No intention needed, checking for active session');
       // Check if there's an active session to restore timer
-      chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
-        if (!chrome.runtime.lastError && session && session.duration > 0) {
+      safeSendMessage({ action: 'getActiveSession' }, (session) => {
+        if (session && session.duration > 0) {
           const elapsed = Date.now() - session.startTime;
           const remaining = Math.max(0, session.duration - elapsed);
           if (remaining > 0) {
@@ -1226,15 +1302,33 @@ function initializeContentScript() {
 
 // Message listener for service worker communication
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('FocusGuard: Content script received message:', request.action);
-  
-  if (request.action === 'timeUp') {
-    showTimeUpNotification();
-  } else if (request.action === 'startTimer') {
-    showFocusTimer(request.duration);
+  // Check if extension context is still valid
+  if (!chrome.runtime?.id) {
+    console.warn('FocusGuard: Extension context invalidated, skipping message');
+    return;
   }
   
-  sendResponse({ success: true });
+  console.log('FocusGuard: Content script received message:', request.action);
+  
+  try {
+    if (request.action === 'ping') {
+      sendResponse({ pong: true });
+    } else if (request.action === 'timeUp') {
+      showTimeUpNotification();
+      sendResponse({ success: true });
+    } else if (request.action === 'startTimer') {
+      showFocusTimer(request.duration);
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: true });
+    }
+  } catch (error) {
+    console.error('FocusGuard: Error handling message:', error);
+    // Don't send response if context is invalid
+    if (chrome.runtime?.id) {
+      sendResponse({ success: false, error: error.message });
+    }
+  }
 });
 
 // Initialize when DOM is ready
@@ -1266,7 +1360,7 @@ document.addEventListener('visibilitychange', () => {
     // Page became visible, check if we need to restore timer
     const siteName = getCurrentSite();
     if (siteName) {
-      chrome.runtime.sendMessage({ action: 'getActiveSession' }, (session) => {
+      safeSendMessage({ action: 'getActiveSession' }, (session) => {
         if (session && session.duration > 0 && !currentTimer) {
           const elapsed = Date.now() - session.startTime;
           const remaining = Math.max(0, session.duration - elapsed);
